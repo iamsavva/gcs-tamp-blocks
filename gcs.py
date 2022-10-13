@@ -70,7 +70,27 @@ class GCSforBlocks:
         mat[:, 0] = np.ones(self.num_modes)
         return mat
 
-    # def get_v_in(self, )
+    # add function that returns a list of edges that go in me
+
+    # add a function that returns a list of edges that go out of me
+
+    # these two functions don't care about start / target nodes, they just take in mode -- it's edge matrix based
+
+    # add functions to populatle the edges / verticies: init from start, target, horizon
+
+    # add reset function
+
+    # add function to change start / end vertex (? in general connectivity can be tricky(=)
+
+    # remove horizon layers
+
+    # solve function
+
+    # display graph function
+
+    # display solution function: in text
+
+    # disaply solution function: visually
 
     def add_start_node(self, initial_state: Point, initial_mode: int):
         """
@@ -85,6 +105,9 @@ class GCSforBlocks:
         name = "start"
         self.gcs.AddVertex(initial_state, name)
         self.horizon_layers += [name]
+        # add edges to next layer
+        # add cost
+        # edges are added assuming point belongs to mode (i.e., check which modes to connect to)
 
     def add_target_node(self, final_state, final_mode):
         """
@@ -100,15 +123,23 @@ class GCSforBlocks:
         self.gcs.AddVertex(final_state, name)
         self.horizon_layers += [name]
         # TODO: must add edges to the nodes in the previous layer, as well as corresponding constraints
+        # add edges to last layer in horizon (check that it has been inited)
+        # add constraints, add cost
 
     def get_vertex_name(self, layer, mode):
         return "M_" + str(layer) + "_" + str(mode)
 
     def add_nodes_for_next_layer(self, layer):
         for mode in range(self.num_modes):
+            # add new vertex
             self.gcs.AddVertex(
                 self.get_convex_set_for_mode(mode), self.get_vertex_name(layer, mode)
             )
+            # figure out what edges from previous layer connect to this node
+            # special case for start (may be should init start after filling out layers)
+            # add an edge
+            # add a constraint on the edge
+            # add a cost on the edge
 
     def get_convex_set_for_mode(self, k: int) -> HPolyhedron:
         """

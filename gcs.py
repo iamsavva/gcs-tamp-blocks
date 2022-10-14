@@ -12,8 +12,10 @@ from pydrake.solvers import (
     Binding,
     Cost,
     L2NormCost,
+    # L2NormCostUsingConicConstraint,
     MathematicalProgramResult,
     LinearConstraint,
+    LinearEqualityConstraint
 )
 from tqdm import tqdm
 
@@ -84,14 +86,14 @@ class GCSforBlocks:
         start_vertex = self.name_to_vertex["start"]
         target_vertex = self.name_to_vertex["target"]
         self.solution = self.gcs.SolveShortestPath(start_vertex, target_vertex)
-        self.show_graph_diagram(self.solution)
+        if self.solution.is_success():
+            self.show_graph_diagram(self.solution)
 
     def show_graph_diagram(
         self,
-        # filename: str = "temp",
         result: T.Optional[MathematicalProgramResult] = None,
+        filename: str = "temp"
     ) -> None:
-
         if result is not None:
             graphviz = self.gcs.GetGraphvizString(result, True, precision=1)
         else:
@@ -207,8 +209,13 @@ class GCSforBlocks:
         self.add_gripper_movement_cost_on_edge(edge)
 
     def add_vertex(self, state: HPolyhedron, name: str) -> GraphOfConvexSets.Vertex:
+        # create a vertex
         vertex = self.gcs.AddVertex(state, name)
         self.name_to_vertex[name] = vertex
+        # add a constraint on each vertex to be within lower/upper bound of the world
+        # TODO: in theory, this should not be necessary
+        set_con = LinearConstraint(np.eye(self.state_dim), self.lb, self.ub)
+        vertex.AddConstraint(Binding[LinearConstraint](set_con, vertex.x()))
         return vertex
 
     def add_gripper_movement_cost_on_edge(self, edge: GraphOfConvexSets.Edge) -> None:
@@ -221,8 +228,10 @@ class GCSforBlocks:
         A[:, 0 : self.block_dim] = np.eye(self.block_dim)
         A[:, self.state_dim : self.state_dim + self.block_dim] = -np.eye(self.block_dim)
         b = np.zeros(self.block_dim)
+
         cost = L2NormCost(A, b)
         edge.AddCost(Binding[Cost](cost, np.append(xv, xu)))
+        # edge.AddCost()
 
     def add_constraints_on_edge(
         self, left_vertex_set_id: int, edge: GraphOfConvexSets.Edge
@@ -234,16 +243,17 @@ class GCSforBlocks:
         xu, xv = edge.xu(), edge.xv()
         left_mode = self.get_mode_from_set_id(left_vertex_set_id)
         A, b = self.get_constraint_for_orbit_of_mode(left_mode)
-        constraints = eq(A.dot(np.append(xv, xu)), b)
-        for c in constraints:
-            edge.AddConstraint(c)
+        # constraints = eq(A.dot(np.append(xv, xu)), b)
+        # for c in constraints:
+        #     edge.AddConstraint(c)
+
+        eq_con = LinearEqualityConstraint(A, b)
+        edge.AddConstraint(Binding[LinearEqualityConstraint](eq_con, np.append(xv, xu)))
+
         # add constraint that right point is in the left set
         left_vertex_set = self.get_convex_set_for_set_id(left_vertex_set_id)
-        print(left_vertex_set.b())
-        print(-np.ones(2*self.state_dim)*1000)
-        set_con = LinearConstraint(left_vertex_set.A(), -np.ones(2*self.state_dim)*1000, left_vertex_set.b())
-        con = Binding[LinearConstraint](set_con, np.append(xv, xu))
-        edge.AddConstraint( con, xv() )
+        set_con = LinearConstraint(left_vertex_set.A(), -np.ones(left_vertex_set.b().size)*1000, left_vertex_set.b())
+        edge.AddConstraint(Binding[LinearConstraint](set_con, xv))
 
 
 

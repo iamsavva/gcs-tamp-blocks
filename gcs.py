@@ -76,32 +76,35 @@ class GCSforBlocks:
 
     # solve function
 
-    # display graph function
-
     # display solution function: in text
 
-    # disaply solution function: visually
+    ###################################################################################
+    # P
 
-    def solve(self, convex_relaxation = True):
-        start_vertex = self.name_to_vertex["start"]
-        target_vertex = self.name_to_vertex["target"]
-        self.solution = self.gcs.SolveShortestPath(start_vertex, target_vertex)
+    def solve(self, use_convex_relaxation = True, max_rounded_paths = 30):
+        start_vertex = self.name_to_vertex["start"].id()
+        target_vertex = self.name_to_vertex["target"].id()
+        options = opt.GraphOfConvexSetsOptions()
+        options.convex_relaxation = use_convex_relaxation
+        if use_convex_relaxation is True:
+            options.preprocessing = True  # TODO Do I need to deal with this?
+            options.max_rounded_paths = max_rounded_paths
+        print("Solving...")
+        self.solution = self.gcs.SolveShortestPath(start_vertex, target_vertex, options)
         if self.solution.is_success():
-            self.show_graph_diagram(self.solution)
+            print("Optimal cost is", self.solution.get_optimal_cost())
+            self.show_graph_diagram()
+        else:
+            print("SOLVE FAILED!")
 
-    def show_graph_diagram(
-        self,
-        result: T.Optional[MathematicalProgramResult] = None,
-        filename: str = "temp"
-    ) -> None:
-        if result is not None:
-            graphviz = self.gcs.GetGraphvizString(result, True, precision=1)
+    def show_graph_diagram(self) -> None:
+        if self.solution.is_success():
+            graphviz = self.gcs.GetGraphvizString(self.solution, True, precision=1)
         else:
             graphviz = self.gcs.GetGraphvizString()
         data = pydot.graph_from_dot_data(graphviz)[0]
         plt = Image(data.create_png())
         display(plt)
-        # data.write_svg(filename)
 
     ###################################################################################
     # Building the finite horizon GCS

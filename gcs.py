@@ -15,7 +15,7 @@ from pydrake.solvers import (
     # L2NormCostUsingConicConstraint,
     MathematicalProgramResult,
     LinearConstraint,
-    LinearEqualityConstraint
+    LinearEqualityConstraint,
 )
 from tqdm import tqdm
 
@@ -24,31 +24,60 @@ from IPython.display import Image, display
 # import colorama
 from colorama import Fore
 
+
 def ERROR(*texts):
-    print(Fore.RED + ' '.join([str(text) for text in texts]))
+    print(Fore.RED + " ".join([str(text) for text in texts]))
+
 
 def WARN(*texts):
-    print(Fore.YELLOW + ' '.join([str(text) for text in texts]))
+    print(Fore.YELLOW + " ".join([str(text) for text in texts]))
+
 
 def INFO(*texts):
-    print(Fore.BLUE + ' '.join([str(text) for text in texts]))
+    print(Fore.BLUE + " ".join([str(text) for text in texts]))
+
 
 def YAY(*texts):
-    print(Fore.GREEN + ' '.join([str(text) for text in texts]))
+    print(Fore.GREEN + " ".join([str(text) for text in texts]))
+
+
+def make_simple_transparent_gcs_test(
+    block_dim, num_blocks, horizon, max_rounded_paths=30
+):
+    gcs = GCSforBlocks(block_dim, num_blocks, horizon)
+
+    width = 1
+    ub = width * 2 * (num_blocks + 1)
+    gcs.set_block_width(width)
+    gcs.set_ub(ub)
+
+    initial_state = []
+    for i in range(gcs.num_modes):
+        block_state = [0] * gcs.block_dim
+        block_state[0] = width * (2 * i + 1)
+        initial_state += block_state
+    initial_point = Point(np.array(initial_state))
+    final_state = []
+    for i in range(gcs.num_modes):
+        block_state = [0] * gcs.block_dim
+        block_state[-1] = ub - width * (2 * i + 1)
+        final_state += block_state
+    final_point = Point(np.array(final_state))
+    gcs.build_the_graph(initial_point, 0, final_point, 0)
+    gcs.solve(max_rounded_paths=max_rounded_paths)
+    gcs.verbose_solution_description()
+    gcs.display_graph()
 
 
 class GCSforBlocks:
     block_dim: int  # number of dimensions that describe the block world
     num_blocks: int  # number of blocks
-    horizon: int  # number of mode swithes
-    lb: npt.NDArray  # lower bound on box that bounds the operational space
-    ub: npt.NDArray  # upper bound on box bounds the operational space
-    width: float = 1.0  # block width
-    delta: float = width / 2  # half block width
-
-    mode_connectivity = "sparse"
-    # full -- allow transitioning into itself 
+    block_width: float = 1.0  # block width
+    mode_connectivity: str = "sparse"
+    # full -- allow transitioning into itself
     # sparse -- don't allow transitioning into itself
+    add_time_cost: bool = True
+    time_cost_weight: float = 1.0
 
     ###################################################################################
     # Properties and inits
@@ -76,7 +105,12 @@ class GCSforBlocks:
         """
         return (self.num_blocks + 1) * self.block_dim
 
-    def __init__(self, block_dim=1, num_blocks=2, horizon=5):
+    @property
+    def delta(self) -> float:
+        """Half block width"""
+        return self.block_width / 2.0
+
+    def __init__(self, block_dim: int = 1, num_blocks: int = 2, horizon: int = 5):
         self.block_dim = block_dim
         self.num_blocks = num_blocks
         self.horizon = horizon
@@ -87,7 +121,7 @@ class GCSforBlocks:
         self.gcs = GraphOfConvexSets()
         self.graph_built = False
 
-        self.graph_edges = np.empty( (self.num_gcs_sets, self.num_gcs_sets) )
+        self.graph_edges = np.empty((self.num_gcs_sets, self.num_gcs_sets))
 
         self.name_to_vertex = dict()
 
@@ -95,10 +129,16 @@ class GCSforBlocks:
 
     # display solution function: in text
 
+    def set_block_width(self, block_width):
+        self.block_width = block_width
+
+    def set_ub(self, ub):
+        self.ub = ub * np.ones(self.state_dim)
+
     ###################################################################################
     # Solve and display solution
 
-    def solve(self, use_convex_relaxation = True, max_rounded_paths = 30, show_graph = False):
+    def solve(self, use_convex_relaxation=True, max_rounded_paths=30, show_graph=False):
         start_vertex = self.name_to_vertex["start"].id()
         target_vertex = self.name_to_vertex["target"].id()
         options = opt.GraphOfConvexSetsOptions()
@@ -109,13 +149,13 @@ class GCSforBlocks:
         INFO("Solving...")
         self.solution = self.gcs.SolveShortestPath(start_vertex, target_vertex, options)
         if self.solution.is_success():
-            YAY("Optimal cost is", self.solution.get_optimal_cost())
+            YAY("Optimal cost is %.1f" % self.solution.get_optimal_cost())
         else:
             ERROR("SOLVE FAILED!")
         if show_graph:
-            self.show_graph_diagram()
+            self.display_graph()
 
-    def show_graph_diagram(self) -> None:
+    def display_graph(self) -> None:
         if self.solution.is_success():
             graphviz = self.gcs.GetGraphvizString(self.solution, True, precision=1)
         else:
@@ -134,13 +174,15 @@ class GCSforBlocks:
         current_edge = next(e for e in edges if e.u() == u)
         # get the next vertex and continue
         v = current_edge.v()
-        target_reached = (v == self.name_to_vertex["target"])
+        target_reached = v == self.name_to_vertex["target"]
         if target_reached:
             return [u] + [v]
         else:
             return [u] + self.find_path_to_target(edges, v)
 
-    def get_solution_path(self):
+    def get_solution_path(self) -> T.Tuple[T.List[str], npt.NDArray[np.float64]]:
+        assert self.graph_built
+        assert self.solution.is_success()
         # find edges with non-zero flow
         flow_variables = [e.phi() for e in self.gcs.Edges()]
         flow_results = [self.solution.GetSolution(p) for p in flow_variables]
@@ -153,11 +195,15 @@ class GCSforBlocks:
         vertex_values = np.vstack([self.solution.GetSolution(v.x()) for v in path])
         return modes, vertex_values
 
-    def get_solution_description(self):
+    def verbose_solution_description(self) -> None:
+        assert self.solution.is_success()
         modes, vertices = self.get_solution_path()
+        print(vertices)
+        for i in range(len(vertices)):
+            vertices[i] = ["%.1f" % v for v in vertices[i]]
         mode_now = 0
         for i in range(len(modes)):
-            sg = vertices[i][0:self.block_dim]
+            sg = vertices[i][0 : self.block_dim]
             if modes[i] == "start":
                 INFO("Start at", sg)
             elif modes[i] == "target":
@@ -167,26 +213,25 @@ class GCSforBlocks:
                 if mode_next == 0:
                     grasp = "Ungrasp block " + str(mode_now)
                 else:
-                    grasp = "Grasp block " + str(mode_next)
+                    grasp = "Grasp   block " + str(mode_next)
                 mode_now = mode_next
-                INFO("Move to", sg, ";", grasp)
+                INFO("Move to", sg, "; " + grasp)
 
-    def get_mode_from_name(self, name):
+    def get_mode_from_name(self, name: str) -> int:
         return int(name.split("_")[-1])
-
 
     ###################################################################################
     # Building the finite horizon GCS
 
-    def populate_modes_per_layer(self):
+    def populate_modes_per_layer(self) -> None:
         # at horizon 0 with have everything connected to initial_state
         initial_mode = 0
-        self.modes_per_layer += [ set(self.get_edges_out_of_set(initial_mode)) ]
+        self.modes_per_layer += [set(self.get_edges_out_of_set(initial_mode))]
         # for horizons 1 through h-1:
         for h in range(1, self.horizon):
             modes_at_next_layer = set()
             # for each modes at previous horizon
-            for m in self.modes_per_layer[h-1]:
+            for m in self.modes_per_layer[h - 1]:
                 # add anything connected to it
                 for k in self.get_edges_out_of_set(m):
                     modes_at_next_layer.add(k)
@@ -198,12 +243,10 @@ class GCSforBlocks:
         initial_set_id: int,
         final_state: Point,
         final_set_id: int,
-        horizon: int = 5,
-    ):
+    ) -> None:
         """
         Build the GCS graph of horizon H from start to target nodes.
         """
-        self.horizon = horizon
         # reset the graph
         self.gcs = GraphOfConvexSets()
         self.graph_built = False
@@ -218,7 +261,7 @@ class GCSforBlocks:
         self.add_target_node(final_state, final_set_id)
         self.graph_built = True
 
-    def add_nodes_for_layer(self, layer: int):
+    def add_nodes_for_layer(self, layer: int) -> None:
         """
         The GCS graph is a trellis diagram (finite horizon GCS); each layer contains an entire GCS graph of modes.
         Here we add the nodes, edges, constraints, and costs on the new layer.
@@ -267,16 +310,18 @@ class GCSforBlocks:
         # add node to the graph
         target_vertex = self.add_vertex(target_state, "target")
         # get edges into target
-        edges_in = self.get_edges_into_set(target_set_id)
+        edges_in = self.modes_per_layer[self.horizon - 1]
         for left_vertex_set_id in edges_in:
             # add an edge
-            left_vertex_name = self.get_vertex_name(self.horizon-1, left_vertex_set_id)
+            left_vertex_name = self.get_vertex_name(
+                self.horizon - 1, left_vertex_set_id
+            )
             left_vertex = self.name_to_vertex[left_vertex_name]
             self.add_edge(left_vertex, target_vertex, left_vertex_set_id)
 
         if self.mode_connectivity == "sparse":
             # add edges between target and every node at mode 0
-            for h in range(self.horizon-1):
+            for h in range(self.horizon - 1):
                 if 0 in self.modes_per_layer[h]:
                     left_vertex_name = self.get_vertex_name(h, 0)
                     left_vertex = self.name_to_vertex[left_vertex_name]
@@ -298,11 +343,12 @@ class GCSforBlocks:
         edge_name = self.get_edge_name(left_vertex.name(), right_vertex.name())
         edge = self.gcs.AddEdge(left_vertex, right_vertex, edge_name)
         # add constraints
-        self.add_constraints_on_edge(
-            left_vertex_set_id, edge
-        )
-        # add cost on the edge
+        self.add_constraints_on_edge(left_vertex_set_id, edge)
+        # add movement cost on the edge
         self.add_gripper_movement_cost_on_edge(edge)
+        # add time cost on edge
+        if self.add_time_cost:
+            self.add_time_cost_on_edge(edge)
 
     def add_vertex(self, state: HPolyhedron, name: str) -> GraphOfConvexSets.Vertex:
         # create a vertex
@@ -328,6 +374,12 @@ class GCSforBlocks:
         cost = L2NormCost(A, b)
         edge.AddCost(Binding[Cost](cost, np.append(xv, xu)))
 
+    def add_time_cost_on_edge(self, edge: GraphOfConvexSets.Edge) -> None:
+        cost = L2NormCost(
+            np.zeros((1, self.state_dim)), self.time_cost_weight * np.ones((1, 1))
+        )
+        edge.AddCost(Binding[Cost](cost, edge.xv()))
+
     def add_constraints_on_edge(
         self, left_vertex_set_id: int, edge: GraphOfConvexSets.Edge
     ) -> None:
@@ -344,10 +396,12 @@ class GCSforBlocks:
 
         # add constraint that right point is in the left set
         left_vertex_set = self.get_convex_set_for_set_id(left_vertex_set_id)
-        set_con = LinearConstraint(left_vertex_set.A(), -np.ones(left_vertex_set.b().size)*1000, left_vertex_set.b())
+        set_con = LinearConstraint(
+            left_vertex_set.A(),
+            -np.ones(left_vertex_set.b().size) * 1000,
+            left_vertex_set.b(),
+        )
         edge.AddConstraint(Binding[LinearConstraint](set_con, xv))
-
-
 
     ###################################################################################
     # Generating convex sets per mode or per set in a mode
@@ -382,7 +436,9 @@ class GCSforBlocks:
             b = np.hstack((b, np.zeros(self.block_dim), np.zeros(self.block_dim)))
             return HPolyhedron(A, b)
 
-    def get_constraint_for_orbit_of_mode(self, mode: int):
+    def get_constraint_for_orbit_of_mode(
+        self, mode: int
+    ) -> T.Tuple[npt.NDArray[np.float64], npt.NDArray[np.float64]]:
         """
         Orbital constraint.
         Delta x_i is zero for any i != 0, k; k is the mode number
@@ -393,16 +449,16 @@ class GCSforBlocks:
         A = np.hstack((np.eye(self.state_dim), -np.eye(self.state_dim)))
         bd = self.block_dim
         # v_0 - u_0 is not constrained
-        A[0:bd, :] = np.zeros((bd, 2*self.state_dim))
+        A[0:bd, :] = np.zeros((bd, 2 * self.state_dim))
         # v_k - u_k is not constrained
-        A[k * bd : (k + 1) * bd, :] = np.zeros((bd, 2*self.state_dim))
+        A[k * bd : (k + 1) * bd, :] = np.zeros((bd, 2 * self.state_dim))
         b = np.zeros(self.state_dim)
         return A, b
 
     ###################################################################################
     # Functions related to connectivity between modes and sets within modes
 
-    def populate_edges_between_sets(self):
+    def populate_edges_between_sets(self) -> None:
         """
         Return a matrix that represents edges in a directed graph of modes.
         For this simple example, the matrix is hand-built.
@@ -418,19 +474,19 @@ class GCSforBlocks:
             mat[:, 0] = np.ones(self.num_gcs_sets)
         elif self.mode_connectivity == "sparse":
             # mode 0 is connected to any other mode except itself
-            mat[0, 1:] = np.ones(self.num_gcs_sets-1)
+            mat[0, 1:] = np.ones(self.num_gcs_sets - 1)
             # mode k is connected only to 0;
-            mat[1:, 0] = np.ones(self.num_gcs_sets-1)
+            mat[1:, 0] = np.ones(self.num_gcs_sets - 1)
         self.graph_edges = mat
 
-    def get_edges_into_set(self, set_id: int):
+    def get_edges_into_set(self, set_id: int) -> T.List[int]:
         """
         Use the edge matrix to determine which edges go into the vertex.
         """
         assert 0 <= set_id < self.num_gcs_sets
         return [v for v in range(self.num_gcs_sets) if self.graph_edges[v, set_id] == 1]
 
-    def get_edges_out_of_set(self, set_id: int):
+    def get_edges_out_of_set(self, set_id: int) -> T.List[int]:
         """
         Use the edge matrix to determine which edges go out of the vertex.
         """

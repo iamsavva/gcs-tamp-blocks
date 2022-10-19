@@ -98,14 +98,18 @@ class GCSforBlocks:
     block_dim: int  # number of dimensions that describe the block world
     num_blocks: int  # number of blocks
     block_width: float = 1.0  # block width
+
     mode_connectivity: str = "sparse"
     # full -- allow transitioning into itself
     # sparse -- don't allow transitioning into itself
+
+    # add a time cost on each edge? this is done to "regularize" the trajectory
+    # goal is to reduce possibility of pointlessly grasping and ungrasping in place
     add_time_cost: bool = True
-    time_cost_weight: float = 1.0
+    time_cost_weight: float = 1.0  # relative weight between
 
     ###################################################################################
-    # Properties and inits
+    # Properties, inits, setter functions
 
     @property
     def num_modes(self) -> int:
@@ -157,100 +161,6 @@ class GCSforBlocks:
         self.name_to_vertex = dict()
 
         self.modes_per_layer = []
-
-    ###################################################################################
-    # Solve and display solution
-
-    def solve(self, use_convex_relaxation=True, max_rounded_paths=30, show_graph=False):
-        """Solve the GCS program. Must build the graph first."""
-        assert self.graph_built
-        start_vertex = self.name_to_vertex["start"].id()
-        target_vertex = self.name_to_vertex["target"].id()
-        options = opt.GraphOfConvexSetsOptions()
-        options.convex_relaxation = use_convex_relaxation
-        if use_convex_relaxation is True:
-            options.preprocessing = True  # TODO Do I need to deal with this?
-            options.max_rounded_paths = max_rounded_paths
-        INFO("Solving...")
-        start = time.time()
-        self.solution = self.gcs.SolveShortestPath(start_vertex, target_vertex, options)
-        if self.solution.is_success():
-            YAY("Solving GCS took %.2f seconds" % (time.time() - start))
-            YAY("Optimal cost is %.1f" % self.solution.get_optimal_cost())
-        else:
-            ERROR("SOLVE FAILED!")
-            ERROR("Solving GCS took %.2f seconds" % (time.time() - start))
-        if show_graph:
-            self.display_graph()
-
-    def display_graph(self) -> None:
-        """Use pydot to visually inspect the graph. If solution acquired -- also displays the solution."""
-        assert self.graph_built
-        if self.solution.is_success():
-            graphviz = self.gcs.GetGraphvizString(self.solution, True, precision=1)
-        else:
-            graphviz = self.gcs.GetGraphvizString()
-        data = pydot.graph_from_dot_data(graphviz)[0]
-        plt = Image(data.create_png())
-        display(plt)
-
-    def find_path_to_target(
-        self,
-        edges: T.List[GraphOfConvexSets.Edge],
-        start: GraphOfConvexSets.Vertex,
-    ) -> T.List[GraphOfConvexSets.Vertex]:
-        """Given a set of active edges, find a path from start to target"""
-        # assuming edges are tight
-        # find edge that has the current vertex as a start
-        current_edge = next(e for e in edges if e.u() == start)
-        # get the next vertex and continue
-        v = current_edge.v()
-        target_reached = v == self.name_to_vertex["target"]
-        if target_reached:
-            return [start] + [v]
-        else:
-            return [start] + self.find_path_to_target(edges, v)
-
-    def get_solution_path(self) -> T.Tuple[T.List[str], npt.NDArray[np.float64]]:
-        """Given a solved GCS problem, and assuming that it's tight, find a path from start to target"""
-        assert self.graph_built
-        assert self.solution.is_success()
-        # find edges with non-zero flow
-        flow_variables = [e.phi() for e in self.gcs.Edges()]
-        flow_results = [self.solution.GetSolution(p) for p in flow_variables]
-        active_edges = [
-            edge for edge, flow in zip(self.gcs.Edges(), flow_results) if flow >= 0.99
-        ]
-        # using these edges, find the path from start to target
-        path = self.find_path_to_target(active_edges, self.name_to_vertex["start"])
-        modes = [v.name() for v in path]
-        vertex_values = np.vstack([self.solution.GetSolution(v.x()) for v in path])
-        return modes, vertex_values
-
-    def verbose_solution_description(self) -> None:
-        """Describe the solution in text: grasp X, move to Y, ungrasp Z"""
-        assert self.solution.is_success()
-        modes, vertices = self.get_solution_path()
-        for i in range(len(vertices)):
-            vertices[i] = ["%.1f" % v for v in vertices[i]]
-        mode_now = 0
-        INFO("-----------------------")
-        INFO("Solution is:")
-        INFO("-----------------------")
-        for i in range(len(modes)):
-            sg = vertices[i][0 : self.block_dim]
-            if modes[i] == "start":
-                INFO("Start at", sg)
-            elif modes[i] == "target":
-                INFO("Move to", sg, "; Finish")
-            else:
-                mode_next = self.get_mode_from_vertex_name(modes[i])
-                if mode_next == 0:
-                    grasp = "Ungrasp block " + str(mode_now)
-                else:
-                    grasp = "Grasp   block " + str(mode_next)
-                mode_now = mode_next
-                INFO("Move to", sg, "; " + grasp)
 
     ###################################################################################
     # Building the finite horizon GCS
@@ -568,3 +478,97 @@ class GCSforBlocks:
 
     def get_edge_name(self, left_vertex_name: str, right_vertex_name: str) -> str:
         return "E: " + left_vertex_name + " -> " + right_vertex_name
+
+    ###################################################################################
+    # Solve and display solution
+
+    def solve(self, use_convex_relaxation=True, max_rounded_paths=30, show_graph=False):
+        """Solve the GCS program. Must build the graph first."""
+        assert self.graph_built
+        start_vertex = self.name_to_vertex["start"].id()
+        target_vertex = self.name_to_vertex["target"].id()
+        options = opt.GraphOfConvexSetsOptions()
+        options.convex_relaxation = use_convex_relaxation
+        if use_convex_relaxation is True:
+            options.preprocessing = True  # TODO Do I need to deal with this?
+            options.max_rounded_paths = max_rounded_paths
+        INFO("Solving...")
+        start = time.time()
+        self.solution = self.gcs.SolveShortestPath(start_vertex, target_vertex, options)
+        if self.solution.is_success():
+            YAY("Solving GCS took %.2f seconds" % (time.time() - start))
+            YAY("Optimal cost is %.1f" % self.solution.get_optimal_cost())
+        else:
+            ERROR("SOLVE FAILED!")
+            ERROR("Solving GCS took %.2f seconds" % (time.time() - start))
+        if show_graph:
+            self.display_graph()
+
+    def display_graph(self) -> None:
+        """Use pydot to visually inspect the graph. If solution acquired -- also displays the solution."""
+        assert self.graph_built
+        if self.solution.is_success():
+            graphviz = self.gcs.GetGraphvizString(self.solution, True, precision=1)
+        else:
+            graphviz = self.gcs.GetGraphvizString()
+        data = pydot.graph_from_dot_data(graphviz)[0]
+        plt = Image(data.create_png())
+        display(plt)
+
+    def find_path_to_target(
+        self,
+        edges: T.List[GraphOfConvexSets.Edge],
+        start: GraphOfConvexSets.Vertex,
+    ) -> T.List[GraphOfConvexSets.Vertex]:
+        """Given a set of active edges, find a path from start to target"""
+        # assuming edges are tight
+        # find edge that has the current vertex as a start
+        current_edge = next(e for e in edges if e.u() == start)
+        # get the next vertex and continue
+        v = current_edge.v()
+        target_reached = v == self.name_to_vertex["target"]
+        if target_reached:
+            return [start] + [v]
+        else:
+            return [start] + self.find_path_to_target(edges, v)
+
+    def get_solution_path(self) -> T.Tuple[T.List[str], npt.NDArray[np.float64]]:
+        """Given a solved GCS problem, and assuming that it's tight, find a path from start to target"""
+        assert self.graph_built
+        assert self.solution.is_success()
+        # find edges with non-zero flow
+        flow_variables = [e.phi() for e in self.gcs.Edges()]
+        flow_results = [self.solution.GetSolution(p) for p in flow_variables]
+        active_edges = [
+            edge for edge, flow in zip(self.gcs.Edges(), flow_results) if flow >= 0.99
+        ]
+        # using these edges, find the path from start to target
+        path = self.find_path_to_target(active_edges, self.name_to_vertex["start"])
+        modes = [v.name() for v in path]
+        vertex_values = np.vstack([self.solution.GetSolution(v.x()) for v in path])
+        return modes, vertex_values
+
+    def verbose_solution_description(self) -> None:
+        """Describe the solution in text: grasp X, move to Y, ungrasp Z"""
+        assert self.solution.is_success()
+        modes, vertices = self.get_solution_path()
+        for i in range(len(vertices)):
+            vertices[i] = ["%.1f" % v for v in vertices[i]]
+        mode_now = 0
+        INFO("-----------------------")
+        INFO("Solution is:")
+        INFO("-----------------------")
+        for i in range(len(modes)):
+            sg = vertices[i][0 : self.block_dim]
+            if modes[i] == "start":
+                INFO("Start at", sg)
+            elif modes[i] == "target":
+                INFO("Move to", sg, "; Finish")
+            else:
+                mode_next = self.get_mode_from_vertex_name(modes[i])
+                if mode_next == 0:
+                    grasp = "Ungrasp block " + str(mode_now)
+                else:
+                    grasp = "Grasp   block " + str(mode_next)
+                mode_now = mode_next
+                INFO("Move to", sg, "; " + grasp)

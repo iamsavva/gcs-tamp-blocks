@@ -21,6 +21,21 @@ from tqdm import tqdm
 
 from IPython.display import Image, display
 
+# import colorama
+from colorama import Fore
+
+def ERROR(*texts):
+    print(Fore.RED + ' '.join([str(text) for text in texts]))
+
+def WARN(*texts):
+    print(Fore.YELLOW + ' '.join([str(text) for text in texts]))
+
+def INFO(*texts):
+    print(Fore.BLUE + ' '.join([str(text) for text in texts]))
+
+def YAY(*texts):
+    print(Fore.GREEN + ' '.join([str(text) for text in texts]))
+
 
 class GCSforBlocks:
     block_dim: int  # number of dimensions that describe the block world
@@ -30,6 +45,10 @@ class GCSforBlocks:
     ub: npt.NDArray  # upper bound on box bounds the operational space
     width: float = 1.0  # block width
     delta: float = width / 2  # half block width
+
+    mode_connectivity = "sparse"
+    # full -- allow transitioning into itself 
+    # sparse -- don't allow transitioning into itself
 
     ###################################################################################
     # Properties and inits
@@ -72,14 +91,12 @@ class GCSforBlocks:
 
         self.name_to_vertex = dict()
 
-    # add function to change start / end vertex (? in general connectivity can be tricky(=)
-
-    # solve function
+        self.modes_per_layer = []
 
     # display solution function: in text
 
     ###################################################################################
-    # P
+    # Solve and display solution
 
     def solve(self, use_convex_relaxation = True, max_rounded_paths = 30):
         start_vertex = self.name_to_vertex["start"].id()
@@ -89,13 +106,13 @@ class GCSforBlocks:
         if use_convex_relaxation is True:
             options.preprocessing = True  # TODO Do I need to deal with this?
             options.max_rounded_paths = max_rounded_paths
-        print("Solving...")
+        INFO("Solving...")
         self.solution = self.gcs.SolveShortestPath(start_vertex, target_vertex, options)
         if self.solution.is_success():
-            print("Optimal cost is", self.solution.get_optimal_cost())
+            YAY("Optimal cost is", self.solution.get_optimal_cost())
             self.show_graph_diagram()
         else:
-            print("SOLVE FAILED!")
+            ERROR("SOLVE FAILED!")
 
     def show_graph_diagram(self) -> None:
         if self.solution.is_success():
@@ -108,6 +125,32 @@ class GCSforBlocks:
 
     ###################################################################################
     # Building the finite horizon GCS
+
+    # def get_nodes
+
+    # def build_the_graph(
+    #     self,
+    #     initial_state: Point,
+    #     initial_set_id: int,
+    #     final_state: Point,
+    #     final_set_id: int,
+    #     horizon: int = 5,
+    # ):
+    #     """
+    #     Build the GCS graph of horizon H from start to target nodes.
+    #     """
+    #     self.horizon = horizon
+    #     # reset the graph
+    #     self.gcs = GraphOfConvexSets()
+    #     self.graph_built = False
+    #     # populate the graph nodes layer by layer
+    #     for layer in tqdm(range(self.horizon), desc="Adding layers: "):
+    #         self.add_nodes_for_layer(layer)
+    #     # add the start node
+    #     self.add_start_node(initial_state, initial_set_id)
+    #     # add the target node
+    #     self.add_target_node(final_state, final_set_id)
+    #     self.graph_built = True
 
     def build_the_graph(
         self,
@@ -189,6 +232,13 @@ class GCSforBlocks:
             left_vertex = self.name_to_vertex[left_vertex_name]
             self.add_edge(left_vertex, target_vertex, left_vertex_set_id)
 
+        if self.mode_connectivity == "sparse":
+            # add edges between target and every node at mode 0
+            for i in range(self.horizon-1):
+                left_vertex_name = self.get_vertex_name(i, 0)
+                left_vertex = self.name_to_vertex[left_vertex_name]
+                self.add_edge(left_vertex, target_vertex, 0)
+
     ###################################################################################
     # Populating edges, edge cost, and edge constraint
 
@@ -234,7 +284,6 @@ class GCSforBlocks:
 
         cost = L2NormCost(A, b)
         edge.AddCost(Binding[Cost](cost, np.append(xv, xu)))
-        # edge.AddCost()
 
     def add_constraints_on_edge(
         self, left_vertex_set_id: int, edge: GraphOfConvexSets.Edge
@@ -246,9 +295,6 @@ class GCSforBlocks:
         xu, xv = edge.xu(), edge.xv()
         left_mode = self.get_mode_from_set_id(left_vertex_set_id)
         A, b = self.get_constraint_for_orbit_of_mode(left_mode)
-        # constraints = eq(A.dot(np.append(xv, xu)), b)
-        # for c in constraints:
-        #     edge.AddConstraint(c)
 
         eq_con = LinearEqualityConstraint(A, b)
         edge.AddConstraint(Binding[LinearEqualityConstraint](eq_con, np.append(xv, xu)))
@@ -320,12 +366,18 @@ class GCSforBlocks:
         When IRIS is used, sets must be A -- clustered (TODO: do they?),
         B -- connectivity checked and defined automatically.
         """
+        assert self.mode_connectivity in ("full", "sparse")
         mat = np.zeros((self.num_gcs_sets, self.num_gcs_sets))
-        # mode 0 is connected to any other mode
-        mat[0, :] = np.ones(self.num_gcs_sets)
-        # mode k is connected only to 0;
-        # TODO: do i need k to k transitions? don't think so
-        mat[:, 0] = np.ones(self.num_gcs_sets)
+        if self.mode_connectivity == "full":
+            # mode 0 is connected to any other mode
+            mat[0, :] = np.ones(self.num_gcs_sets)
+            # mode k is connected only to 0;
+            mat[:, 0] = np.ones(self.num_gcs_sets)
+        elif self.mode_connectivity == "sparse":
+            # mode 0 is connected to any other mode except itself
+            mat[0, 1:] = np.ones(self.num_gcs_sets-1)
+            # mode k is connected only to 0;
+            mat[1:, 0] = np.ones(self.num_gcs_sets-1)
         return mat
 
     def get_edges_into_set(self, set_id: int):

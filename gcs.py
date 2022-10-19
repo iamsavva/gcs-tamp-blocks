@@ -87,7 +87,7 @@ class GCSforBlocks:
         self.gcs = GraphOfConvexSets()
         self.graph_built = False
 
-        self.graph_edges = self.define_edges_between_sets()
+        self.graph_edges = np.empty( (self.num_gcs_sets, self.num_gcs_sets) )
 
         self.name_to_vertex = dict()
 
@@ -98,7 +98,7 @@ class GCSforBlocks:
     ###################################################################################
     # Solve and display solution
 
-    def solve(self, use_convex_relaxation = True, max_rounded_paths = 30):
+    def solve(self, use_convex_relaxation = True, max_rounded_paths = 30, show_graph = False):
         start_vertex = self.name_to_vertex["start"].id()
         target_vertex = self.name_to_vertex["target"].id()
         options = opt.GraphOfConvexSetsOptions()
@@ -110,9 +110,10 @@ class GCSforBlocks:
         self.solution = self.gcs.SolveShortestPath(start_vertex, target_vertex, options)
         if self.solution.is_success():
             YAY("Optimal cost is", self.solution.get_optimal_cost())
-            self.show_graph_diagram()
         else:
             ERROR("SOLVE FAILED!")
+        if show_graph:
+            self.show_graph_diagram()
 
     def show_graph_diagram(self) -> None:
         if self.solution.is_success():
@@ -123,34 +124,73 @@ class GCSforBlocks:
         plt = Image(data.create_png())
         display(plt)
 
+    def find_path_to_target(
+        self,
+        edges: T.List[GraphOfConvexSets.Edge],
+        u: GraphOfConvexSets.Vertex,
+    ) -> T.List[GraphOfConvexSets.Vertex]:
+        # assuming edges are tight
+        # find edge that has the current vertex as a start
+        current_edge = next(e for e in edges if e.u() == u)
+        # get the next vertex and continue
+        v = current_edge.v()
+        target_reached = (v == self.name_to_vertex["target"])
+        if target_reached:
+            return [u] + [v]
+        else:
+            return [u] + self.find_path_to_target(edges, v)
+
+    def get_solution_path(self):
+        # find edges with non-zero flow
+        flow_variables = [e.phi() for e in self.gcs.Edges()]
+        flow_results = [self.solution.GetSolution(p) for p in flow_variables]
+        active_edges = [
+            edge for edge, flow in zip(self.gcs.Edges(), flow_results) if flow >= 0.99
+        ]
+        # using these edges, find the path from start to target
+        path = self.find_path_to_target(active_edges, self.name_to_vertex["start"])
+        modes = [v.name() for v in path]
+        vertex_values = np.vstack([self.solution.GetSolution(v.x()) for v in path])
+        return modes, vertex_values
+
+    def get_solution_description(self):
+        modes, vertices = self.get_solution_path()
+        mode_now = 0
+        for i in range(len(modes)):
+            sg = vertices[i][0:self.block_dim]
+            if modes[i] == "start":
+                INFO("Start at", sg)
+            elif modes[i] == "target":
+                INFO("Move to", sg, "; Finish")
+            else:
+                mode_next = self.get_mode_from_name(modes[i])
+                if mode_next == 0:
+                    grasp = "Ungrasp block " + str(mode_now)
+                else:
+                    grasp = "Grasp block " + str(mode_next)
+                mode_now = mode_next
+                INFO("Move to", sg, ";", grasp)
+
+    def get_mode_from_name(self, name):
+        return int(name.split("_")[-1])
+
+
     ###################################################################################
     # Building the finite horizon GCS
 
-    # def get_nodes
-
-    # def build_the_graph(
-    #     self,
-    #     initial_state: Point,
-    #     initial_set_id: int,
-    #     final_state: Point,
-    #     final_set_id: int,
-    #     horizon: int = 5,
-    # ):
-    #     """
-    #     Build the GCS graph of horizon H from start to target nodes.
-    #     """
-    #     self.horizon = horizon
-    #     # reset the graph
-    #     self.gcs = GraphOfConvexSets()
-    #     self.graph_built = False
-    #     # populate the graph nodes layer by layer
-    #     for layer in tqdm(range(self.horizon), desc="Adding layers: "):
-    #         self.add_nodes_for_layer(layer)
-    #     # add the start node
-    #     self.add_start_node(initial_state, initial_set_id)
-    #     # add the target node
-    #     self.add_target_node(final_state, final_set_id)
-    #     self.graph_built = True
+    def populate_modes_per_layer(self):
+        # at horizon 0 with have everything connected to initial_state
+        initial_mode = 0
+        self.modes_per_layer += [ set(self.get_edges_out_of_set(initial_mode)) ]
+        # for horizons 1 through h-1:
+        for h in range(1, self.horizon):
+            modes_at_next_layer = set()
+            # for each modes at previous horizon
+            for m in self.modes_per_layer[h-1]:
+                # add anything connected to it
+                for k in self.get_edges_out_of_set(m):
+                    modes_at_next_layer.add(k)
+            self.modes_per_layer += [modes_at_next_layer]
 
     def build_the_graph(
         self,
@@ -167,6 +207,8 @@ class GCSforBlocks:
         # reset the graph
         self.gcs = GraphOfConvexSets()
         self.graph_built = False
+        self.populate_edges_between_sets()
+        self.populate_modes_per_layer()
         # populate the graph nodes layer by layer
         for layer in tqdm(range(self.horizon), desc="Adding layers: "):
             self.add_nodes_for_layer(layer)
@@ -181,7 +223,7 @@ class GCSforBlocks:
         The GCS graph is a trellis diagram (finite horizon GCS); each layer contains an entire GCS graph of modes.
         Here we add the nodes, edges, constraints, and costs on the new layer.
         """
-        for set_id in range(self.num_gcs_sets):
+        for set_id in self.modes_per_layer[layer]:
             # add new vertex
             new_vertex = self.add_vertex(
                 self.get_convex_set_for_set_id(set_id),
@@ -234,10 +276,11 @@ class GCSforBlocks:
 
         if self.mode_connectivity == "sparse":
             # add edges between target and every node at mode 0
-            for i in range(self.horizon-1):
-                left_vertex_name = self.get_vertex_name(i, 0)
-                left_vertex = self.name_to_vertex[left_vertex_name]
-                self.add_edge(left_vertex, target_vertex, 0)
+            for h in range(self.horizon-1):
+                if 0 in self.modes_per_layer[h]:
+                    left_vertex_name = self.get_vertex_name(h, 0)
+                    left_vertex = self.name_to_vertex[left_vertex_name]
+                    self.add_edge(left_vertex, target_vertex, 0)
 
     ###################################################################################
     # Populating edges, edge cost, and edge constraint
@@ -359,7 +402,7 @@ class GCSforBlocks:
     ###################################################################################
     # Functions related to connectivity between modes and sets within modes
 
-    def define_edges_between_sets(self):
+    def populate_edges_between_sets(self):
         """
         Return a matrix that represents edges in a directed graph of modes.
         For this simple example, the matrix is hand-built.
@@ -378,7 +421,7 @@ class GCSforBlocks:
             mat[0, 1:] = np.ones(self.num_gcs_sets-1)
             # mode k is connected only to 0;
             mat[1:, 0] = np.ones(self.num_gcs_sets-1)
-        return mat
+        self.graph_edges = mat
 
     def get_edges_into_set(self, set_id: int):
         """

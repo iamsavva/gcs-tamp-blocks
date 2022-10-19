@@ -24,6 +24,8 @@ from IPython.display import Image, display
 # import colorama
 from colorama import Fore
 
+import time
+
 
 def ERROR(*texts):
     print(Fore.RED + " ".join([str(text) for text in texts]))
@@ -42,7 +44,11 @@ def YAY(*texts):
 
 
 def make_simple_transparent_gcs_test(
-    block_dim, num_blocks, horizon, max_rounded_paths=30
+    block_dim: int,
+    num_blocks: int,
+    horizon: int,
+    max_rounded_paths: int = 30,
+    display_graph: bool = False,
 ):
     gcs = GCSforBlocks(block_dim, num_blocks, horizon)
 
@@ -66,7 +72,26 @@ def make_simple_transparent_gcs_test(
     gcs.build_the_graph(initial_point, 0, final_point, 0)
     gcs.solve(max_rounded_paths=max_rounded_paths)
     gcs.verbose_solution_description()
-    gcs.display_graph()
+    if display_graph:
+        gcs.display_graph()
+
+
+def make_some_simple_transparent_tests():
+    INFO("--------------------------")
+    INFO("Test case: 1D, 3 blocks\n")
+    make_simple_transparent_gcs_test(1, 3, 7)
+    INFO("--------------------------")
+    INFO("Test case: 2D, 3 blocks\n")
+    make_simple_transparent_gcs_test(2, 3, 10)
+    INFO("--------------------------")
+    INFO("Test case: 3D, 5 blocks\n")
+    make_simple_transparent_gcs_test(3, 5, 20, 50)
+
+
+def just_one_simple_test():
+    INFO("--------------------------")
+    INFO("Test case: 1D, 3 blocks\n")
+    make_simple_transparent_gcs_test(1, 3, 7)
 
 
 class GCSforBlocks:
@@ -110,6 +135,12 @@ class GCSforBlocks:
         """Half block width"""
         return self.block_width / 2.0
 
+    def set_block_width(self, block_width: float) -> None:
+        self.block_width = block_width
+
+    def set_ub(self, ub: float) -> None:
+        self.ub = ub * np.ones(self.state_dim)
+
     def __init__(self, block_dim: int = 1, num_blocks: int = 2, horizon: int = 5):
         self.block_dim = block_dim
         self.num_blocks = num_blocks
@@ -127,18 +158,12 @@ class GCSforBlocks:
 
         self.modes_per_layer = []
 
-    # display solution function: in text
-
-    def set_block_width(self, block_width):
-        self.block_width = block_width
-
-    def set_ub(self, ub):
-        self.ub = ub * np.ones(self.state_dim)
-
     ###################################################################################
     # Solve and display solution
 
     def solve(self, use_convex_relaxation=True, max_rounded_paths=30, show_graph=False):
+        """Solve the GCS program. Must build the graph first."""
+        assert self.graph_built
         start_vertex = self.name_to_vertex["start"].id()
         target_vertex = self.name_to_vertex["target"].id()
         options = opt.GraphOfConvexSetsOptions()
@@ -147,15 +172,20 @@ class GCSforBlocks:
             options.preprocessing = True  # TODO Do I need to deal with this?
             options.max_rounded_paths = max_rounded_paths
         INFO("Solving...")
+        start = time.time()
         self.solution = self.gcs.SolveShortestPath(start_vertex, target_vertex, options)
         if self.solution.is_success():
+            YAY("Solving GCS took %.2f seconds" % (time.time() - start))
             YAY("Optimal cost is %.1f" % self.solution.get_optimal_cost())
         else:
             ERROR("SOLVE FAILED!")
+            ERROR("Solving GCS took %.2f seconds" % (time.time() - start))
         if show_graph:
             self.display_graph()
 
     def display_graph(self) -> None:
+        """Use pydot to visually inspect the graph. If solution acquired -- also displays the solution."""
+        assert self.graph_built
         if self.solution.is_success():
             graphviz = self.gcs.GetGraphvizString(self.solution, True, precision=1)
         else:
@@ -167,20 +197,22 @@ class GCSforBlocks:
     def find_path_to_target(
         self,
         edges: T.List[GraphOfConvexSets.Edge],
-        u: GraphOfConvexSets.Vertex,
+        start: GraphOfConvexSets.Vertex,
     ) -> T.List[GraphOfConvexSets.Vertex]:
+        """Given a set of active edges, find a path from start to target"""
         # assuming edges are tight
         # find edge that has the current vertex as a start
-        current_edge = next(e for e in edges if e.u() == u)
+        current_edge = next(e for e in edges if e.u() == start)
         # get the next vertex and continue
         v = current_edge.v()
         target_reached = v == self.name_to_vertex["target"]
         if target_reached:
-            return [u] + [v]
+            return [start] + [v]
         else:
-            return [u] + self.find_path_to_target(edges, v)
+            return [start] + self.find_path_to_target(edges, v)
 
     def get_solution_path(self) -> T.Tuple[T.List[str], npt.NDArray[np.float64]]:
+        """Given a solved GCS problem, and assuming that it's tight, find a path from start to target"""
         assert self.graph_built
         assert self.solution.is_success()
         # find edges with non-zero flow
@@ -196,12 +228,15 @@ class GCSforBlocks:
         return modes, vertex_values
 
     def verbose_solution_description(self) -> None:
+        """Describe the solution in text: grasp X, move to Y, ungrasp Z"""
         assert self.solution.is_success()
         modes, vertices = self.get_solution_path()
-        print(vertices)
         for i in range(len(vertices)):
             vertices[i] = ["%.1f" % v for v in vertices[i]]
         mode_now = 0
+        INFO("-----------------------")
+        INFO("Solution is:")
+        INFO("-----------------------")
         for i in range(len(modes)):
             sg = vertices[i][0 : self.block_dim]
             if modes[i] == "start":
@@ -209,7 +244,7 @@ class GCSforBlocks:
             elif modes[i] == "target":
                 INFO("Move to", sg, "; Finish")
             else:
-                mode_next = self.get_mode_from_name(modes[i])
+                mode_next = self.get_mode_from_vertex_name(modes[i])
                 if mode_next == 0:
                     grasp = "Ungrasp block " + str(mode_now)
                 else:
@@ -217,25 +252,8 @@ class GCSforBlocks:
                 mode_now = mode_next
                 INFO("Move to", sg, "; " + grasp)
 
-    def get_mode_from_name(self, name: str) -> int:
-        return int(name.split("_")[-1])
-
     ###################################################################################
     # Building the finite horizon GCS
-
-    def populate_modes_per_layer(self) -> None:
-        # at horizon 0 with have everything connected to initial_state
-        initial_mode = 0
-        self.modes_per_layer += [set(self.get_edges_out_of_set(initial_mode))]
-        # for horizons 1 through h-1:
-        for h in range(1, self.horizon):
-            modes_at_next_layer = set()
-            # for each modes at previous horizon
-            for m in self.modes_per_layer[h - 1]:
-                # add anything connected to it
-                for k in self.get_edges_out_of_set(m):
-                    modes_at_next_layer.add(k)
-            self.modes_per_layer += [modes_at_next_layer]
 
     def build_the_graph(
         self,
@@ -260,6 +278,9 @@ class GCSforBlocks:
         # add the target node
         self.add_target_node(final_state, final_set_id)
         self.graph_built = True
+
+    ###################################################################################
+    # Adding layers of nodes (trellis diagram style)
 
     def add_nodes_for_layer(self, layer: int) -> None:
         """
@@ -328,7 +349,7 @@ class GCSforBlocks:
                     self.add_edge(left_vertex, target_vertex, 0)
 
     ###################################################################################
-    # Populating edges, edge cost, and edge constraint
+    # Populating edges and vertices
 
     def add_edge(
         self,
@@ -342,8 +363,16 @@ class GCSforBlocks:
         # add an edge
         edge_name = self.get_edge_name(left_vertex.name(), right_vertex.name())
         edge = self.gcs.AddEdge(left_vertex, right_vertex, edge_name)
-        # add constraints
-        self.add_constraints_on_edge(left_vertex_set_id, edge)
+
+        # -----------------------------------------------------------------
+        # Adding constraints
+        # -----------------------------------------------------------------
+        self.add_orbital_constraint(left_vertex_set_id, edge)
+        self.add_common_mode_at_transition_constraint(left_vertex_set_id, edge)
+
+        # -----------------------------------------------------------------
+        # Adding costs
+        # -----------------------------------------------------------------
         # add movement cost on the edge
         self.add_gripper_movement_cost_on_edge(edge)
         # add time cost on edge
@@ -360,6 +389,33 @@ class GCSforBlocks:
         vertex.AddConstraint(Binding[LinearConstraint](set_con, vertex.x()))
         return vertex
 
+    ###################################################################################
+    # Adding constraints and cost terms
+    def add_orbital_constraint(
+        self, left_vertex_set_id: int, edge: GraphOfConvexSets.Edge
+    ) -> None:
+        """Add orbital constraints on the edge"""
+        xu, xv = edge.xu(), edge.xv()
+        left_mode = self.get_mode_from_set_id(left_vertex_set_id)
+        A, b = self.get_constraint_for_orbit_of_mode(left_mode)
+
+        eq_con = LinearEqualityConstraint(A, b)
+        edge.AddConstraint(Binding[LinearEqualityConstraint](eq_con, np.append(xv, xu)))
+
+    def add_common_mode_at_transition_constraint(
+        self, left_vertex_set_id: int, edge: GraphOfConvexSets.Edge
+    ) -> None:
+        """
+        Add a constraint that the right vertex belongs to the same mode as the left vertex
+        """
+        left_vertex_set = self.get_convex_set_for_set_id(left_vertex_set_id)
+        set_con = LinearConstraint(
+            left_vertex_set.A(),
+            -np.ones(left_vertex_set.b().size) * 1000,
+            left_vertex_set.b(),
+        )
+        edge.AddConstraint(Binding[LinearConstraint](set_con, edge.xv()))
+
     def add_gripper_movement_cost_on_edge(self, edge: GraphOfConvexSets.Edge) -> None:
         """
         L2 norm cost on the movement of the gripper.
@@ -370,38 +426,17 @@ class GCSforBlocks:
         A[:, 0 : self.block_dim] = np.eye(self.block_dim)
         A[:, self.state_dim : self.state_dim + self.block_dim] = -np.eye(self.block_dim)
         b = np.zeros(self.block_dim)
-
+        # add the cost
         cost = L2NormCost(A, b)
         edge.AddCost(Binding[Cost](cost, np.append(xv, xu)))
 
     def add_time_cost_on_edge(self, edge: GraphOfConvexSets.Edge) -> None:
+        """Walking along the edges costs some cosntant term. This is done to avoid grasping and ungrasping in place."""
+        # TODO: shouldn't be using an L2 cost, there are cleaner ways to do this
         cost = L2NormCost(
             np.zeros((1, self.state_dim)), self.time_cost_weight * np.ones((1, 1))
         )
         edge.AddCost(Binding[Cost](cost, edge.xv()))
-
-    def add_constraints_on_edge(
-        self, left_vertex_set_id: int, edge: GraphOfConvexSets.Edge
-    ) -> None:
-        """
-        Add orbital constraints on the edge and that the right vertex belongs to set of the left vertex
-        """
-        # add orbital constraints on the edge
-        xu, xv = edge.xu(), edge.xv()
-        left_mode = self.get_mode_from_set_id(left_vertex_set_id)
-        A, b = self.get_constraint_for_orbit_of_mode(left_mode)
-
-        eq_con = LinearEqualityConstraint(A, b)
-        edge.AddConstraint(Binding[LinearEqualityConstraint](eq_con, np.append(xv, xu)))
-
-        # add constraint that right point is in the left set
-        left_vertex_set = self.get_convex_set_for_set_id(left_vertex_set_id)
-        set_con = LinearConstraint(
-            left_vertex_set.A(),
-            -np.ones(left_vertex_set.b().size) * 1000,
-            left_vertex_set.b(),
-        )
-        edge.AddConstraint(Binding[LinearConstraint](set_con, xv))
 
     ###################################################################################
     # Generating convex sets per mode or per set in a mode
@@ -456,7 +491,27 @@ class GCSforBlocks:
         return A, b
 
     ###################################################################################
+    # IRIS
+
+    ###################################################################################
     # Functions related to connectivity between modes and sets within modes
+
+    def populate_modes_per_layer(self) -> None:
+        # at horizon 0 with have everything connected to initial_state
+        initial_mode = 0
+        self.modes_per_layer += [set(self.get_edges_out_of_set(initial_mode))]
+        # for horizons 1 through h-1:
+        for h in range(1, self.horizon):
+            modes_at_next_layer = set()
+            # for each modes at previous horizon
+            for m in self.modes_per_layer[h - 1]:
+                # add anything connected to it
+                for k in self.get_edges_out_of_set(m):
+                    modes_at_next_layer.add(k)
+            self.modes_per_layer += [modes_at_next_layer]
+
+    def populate_sets_per_layer(self) -> None:
+        pass
 
     def populate_edges_between_sets(self) -> None:
         """
@@ -506,8 +561,10 @@ class GCSforBlocks:
     # Vertex and edge naming
 
     def get_vertex_name(self, layer: int, set_id: int) -> str:
-        """ """
         return "M_" + str(layer) + "_" + str(set_id)
+
+    def get_mode_from_vertex_name(self, name: str) -> int:
+        return int(name.split("_")[-1])
 
     def get_edge_name(self, left_vertex_name: str, right_vertex_name: str) -> str:
         return "E: " + left_vertex_name + " -> " + right_vertex_name

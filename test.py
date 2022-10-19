@@ -4,6 +4,7 @@ import numpy as np
 from gcs import GCSforBlocks
 from util import INFO
 
+
 def make_simple_transparent_gcs_test(
     block_dim: int,
     num_blocks: int,
@@ -53,5 +54,6 @@ def just_one_simple_test():
     INFO("--------------------------")
     INFO("Test case: 1D, 3 blocks\n")
     make_simple_transparent_gcs_test(2, 3, 15)
+
 
 just_one_simple_test()

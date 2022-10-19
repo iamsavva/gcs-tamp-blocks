@@ -88,21 +88,23 @@ class GCSforBlocks:
         self.graph_built = False
 
         # name to vertex dictionary, populated as we populate the graph with vertices
-        self.name_to_vertex = dict() # T.Dict[str, GraphOfConvexSets.Vertex]
+        self.name_to_vertex = dict()  # T.Dict[str, GraphOfConvexSets.Vertex]
 
         # structures that hold information about the graph connectivity.
         # used for hand-built graph sparcity
         # see populate_important_things(self)
-        self.sets_per_mode = dict() # T.Dict[int, T.Set[int]]
-        self.modes_per_layer = dict() # T.Dict[int, T.Set[int]]
-        self.sets_per_layer = dict() # T.Dict[int, T.Set[int]]
-        self.mode_graph_edges = np.empty( [] ) # np.NDArray, size num_modes x num_modes
-        self.set_graph_edges = np.array([]) # np.NDArray, size num_gcs_sets x num_gcs_sets
+        self.sets_per_mode = dict()  # T.Dict[int, T.Set[int]]
+        self.modes_per_layer = dict()  # T.Dict[int, T.Set[int]]
+        self.sets_per_layer = dict()  # T.Dict[int, T.Set[int]]
+        self.mode_graph_edges = np.empty([])  # np.NDArray, size num_modes x num_modes
+        self.set_graph_edges = np.array(
+            []
+        )  # np.NDArray, size num_gcs_sets x num_gcs_sets
 
     ###################################################################################
     # Building the finite horizon GCS
 
-    def build_the_graph( 
+    def build_the_graph(
         self,
         initial_state: Point,
         initial_mode: int,
@@ -129,19 +131,17 @@ class GCSforBlocks:
         self.add_start_node(initial_state, initial_set_id)
 
         # add the target node
-        final_set_id = self.get_set_id_for_point_and_mode(final_state, final_mode)
-        self.add_target_node(final_state, final_set_id)
-        
-        self.graph_built = True
+        # final_set_id = self.get_set_id_for_point_and_mode(final_state, final_mode)
+        self.add_target_node(final_state, final_mode)
 
-    
+        self.graph_built = True
 
     ###################################################################################
     # Adding layers of nodes (trellis diagram style)
 
-    def add_nodes_for_layer(self, layer: int) -> None: 
+    def add_nodes_for_layer(self, layer: int) -> None:
         """
-        READY
+        NEEDS WORK
         The GCS graph is a trellis diagram (finite horizon GCS); each layer contains an entire GCS graph of modes.
         Here we add the nodes, edges, constraints, and costs on the new layer.
         """
@@ -154,6 +154,7 @@ class GCSforBlocks:
                     self.get_convex_set_for_set_id(set_id),
                     self.get_vertex_name(layer, set_id),
                 )
+                # TODO: edges in, edges out stuff
                 # edges and costs for layer 0 are populated in add_start_node
                 if layer > 0:
                     edges_in = self.get_edges_into_set(set_id)
@@ -167,16 +168,13 @@ class GCSforBlocks:
 
     def add_start_node(self, start_state: Point, start_set_id: int) -> None:
         """
-        READY
-        Adds start node to the graph.
+        NEEDS WORK
+        Adds start node to the graph, as well as edges that connect to it.
         """
-        # check that point belongs to the corresponding mode 
-        # TODO: should be unnecessary 
-        # convex_set = self.get_convex_set_for_set_id(start_set_id)
-        # assert convex_set.PointInSet(start_state.x())
         # add node to the graph
         start_vertex = self.add_vertex(start_state, "start")
         # get edges from start
+        # TODO: does get_edges_out_of_set contain out of mode edges? looks like it
         edges_out = self.get_edges_out_of_set(start_set_id)
         for right_vertex_set_id in edges_out:
             # add an edge
@@ -184,34 +182,39 @@ class GCSforBlocks:
             right_vertex = self.name_to_vertex[right_vertex_name]
             self.add_edge(start_vertex, right_vertex, start_set_id)
 
-    def add_target_node(self, target_state: Point, target_set_id: int) -> None:
+    def add_target_node(self, target_state: Point, target_mode: int) -> None:
         """
-        NEEDS WORK
-        Adds target node to the graph.
+        READY
+        Adds target node to the graph, as well as edges that connect to it.
         """
-        # check that point belongs to the corresponding mode
-        # mode_set = self.get_convex_set_for_set_id(target_set_id)
-        # assert mode_set.PointInSet(target_state.x())
-        # add node to the graph
+        # add target vertex
         target_vertex = self.add_vertex(target_state, "target")
-        # TODO: do i need to look at set per layer?
-        # get edges into target
-        edges_in = self.modes_per_layer[self.horizon - 1]
-        for left_vertex_set_id in edges_in: # TODO: must be sets
-            # add an edge
-            left_vertex_name = self.get_vertex_name(
-                self.horizon - 1, left_vertex_set_id
-            )
-            left_vertex = self.name_to_vertex[left_vertex_name]
-            self.add_edge(left_vertex, target_vertex, left_vertex_set_id)
 
-        if self.mode_connectivity == "sparse":
-            # add edges between target and every node at mode 0
-            for h in range(self.horizon - 1):
-                if 0 in self.modes_per_layer[h]:
-                    left_vertex_name = self.get_vertex_name(h, 0)
-                    left_vertex = self.name_to_vertex[left_vertex_name]
-                    self.add_edge(left_vertex, target_vertex, 0) # TODO: need set id
+        # sets in target_mode
+        sets_in_target_mode = self.sets_per_mode[target_mode]
+        # sets that contain target point; these are the sets that can move into target in 1 step
+        sets_with_target = []
+        for set_in_mode in sets_in_target_mode:
+            convex_set = self.get_convex_set_for_set_id(set_in_mode)
+            if convex_set.PointInSet(target_state.x()):
+                sets_with_target += [set_in_mode]
+        assert (
+            len(sets_with_target) > 0
+        ), "No set in target mode contains the target point!"
+
+        # at each horizon level, only sets that contain the target can transition into target
+        # at each layer
+        for layer in range(self.horizon):
+            # if that layer has a target mode
+            if target_mode in self.modes_per_layer[layer]:
+                # for each set that contains the target
+                for set_id in sets_with_target:
+                    # this if statement shouldn't be necessary, but still
+                    if set_id in self.sets_per_layer[layer]:
+                        # add an edge
+                        left_vertex_name = self.get_vertex_name(layer, set_id)
+                        left_vertex = self.name_to_vertex[left_vertex_name]
+                        self.add_edge(left_vertex, target_vertex, set_id)
 
     ###################################################################################
     # Populating edges and vertices
@@ -245,8 +248,10 @@ class GCSforBlocks:
         if self.add_time_cost:
             self.add_time_cost_on_edge(edge)
 
-    def add_vertex(self, convex_set: HPolyhedron, name: str) -> GraphOfConvexSets.Vertex:
-        """ 
+    def add_vertex(
+        self, convex_set: HPolyhedron, name: str
+    ) -> GraphOfConvexSets.Vertex:
+        """
         NEEDS WORK, NOT TRANSPARENT
         Define a vertex with a convex set.
         Define upper/lower boundaries on variables to make CSDP solver happy.
@@ -290,7 +295,7 @@ class GCSforBlocks:
         # fill in linear constraint on the right vertex
         A = left_vertex_set.A()
         lb = -np.ones(left_vertex_set.b().size) * 1000
-        ub = left_vertex_set.b()  
+        ub = left_vertex_set.b()
         set_con = LinearConstraint(A, lb, ub)
         edge.AddConstraint(Binding[LinearConstraint](set_con, edge.xv()))
 
@@ -314,16 +319,14 @@ class GCSforBlocks:
         READY
         Walking along the edges costs some cosntant term. This is done to avoid grasping and ungrasping in place.
         """
-        cost = LinearCost(
-            np.zeros(self.state_dim), self.time_cost_weight * np.ones(1)
-        )
+        cost = LinearCost(np.zeros(self.state_dim), self.time_cost_weight * np.ones(1))
         edge.AddCost(Binding[Cost](cost, edge.xv()))
 
     ###################################################################################
     # Generating convex sets per mode or per set in a mode
 
     def get_set_id_for_point_and_mode(self, state: Point, mode: int) -> int:
-        """ 
+        """
         READY
         Given a mode and a point, find a set that belongs to the mode that includes that point.
         Note that there may be multiple sets that include this point; set with lowest index is returned.
@@ -364,7 +367,9 @@ class GCSforBlocks:
         NEEDS WORK
         Here I should be running IRIS to determine the sets for each mode.
         """
-        assert self.problem_complexity in ("transparent-no-obstacles"), "Non-transparent blocks not implemented yet"
+        assert self.problem_complexity in (
+            "transparent-no-obstacles"
+        ), "Non-transparent blocks not implemented yet"
         if self.problem_complexity == "transparent-no-obstacles":
             for mode in range(self.num_modes):
                 self.sets_per_mode[mode] = {mode}
@@ -376,7 +381,9 @@ class GCSforBlocks:
         In the simple case of transparent blocks, each vertex represents the full mode, so it's just the vertex itself.
         """
         assert 0 <= set_id < self.num_gcs_sets, "Set number out of bounds"
-        assert self.problem_complexity in ("transparent-no-obstacles"), "Non-transparent blocks not implemented yet"
+        assert self.problem_complexity in (
+            "transparent-no-obstacles"
+        ), "Non-transparent blocks not implemented yet"
         mode = set_id
         return mode
 
@@ -386,7 +393,9 @@ class GCSforBlocks:
         Returns convex set that corresponds to the given vertex.
         For the simple case of transparent blocks, this is equivivalent to the convex set that corresponds to the mode.
         """
-        assert self.problem_complexity in ("transparent-no-obstacles"), "Non-transparent blocks not implemented yet"
+        assert self.problem_complexity in (
+            "transparent-no-obstacles"
+        ), "Non-transparent blocks not implemented yet"
         if self.problem_complexity == "transparent-no-obstacles":
             return self.get_convex_set_for_mode_transparent(set_id)
 
@@ -417,7 +426,7 @@ class GCSforBlocks:
     ###################################################################################
     # Functions related to connectivity between modes and sets within modes
 
-    def populate_important_things(self, initial_mode:int)->None:
+    def populate_important_things(self, initial_mode: int) -> None:
         """
         READY
         Preprocessing step that populates various graph-related things in an appropriate order.
@@ -452,16 +461,20 @@ class GCSforBlocks:
         When IRIS is used, sets must be A -- clustered (TODO: do they?),
         B -- connectivity checked and defined automatically.
         """
-        assert self.problem_complexity in ("transparent-no-obstacles"), "Non-transparent blocks not implemented yet"
+        assert self.problem_complexity in (
+            "transparent-no-obstacles"
+        ), "Non-transparent blocks not implemented yet"
         if self.problem_complexity == "transparent-no-obstacles":
-            assert self.mode_connectivity in ("sparse"), "For transparent blocks must have sparse connectivity"
+            assert self.mode_connectivity in (
+                "sparse"
+            ), "For transparent blocks must have sparse connectivity"
             self.set_graph_edges = np.zeros((self.num_gcs_sets, self.num_gcs_sets))
             # mode 0 is connected to any other mode except itself
             self.set_graph_edges[0, 1:] = np.ones(self.num_gcs_sets - 1)
             # mode k is connected only to 0;
             self.set_graph_edges[1:, 0] = np.ones(self.num_gcs_sets - 1)
 
-    def populate_modes_per_layer(self, initial_mode:int) -> None:
+    def populate_modes_per_layer(self, initial_mode: int) -> None:
         """
         READY
         For each layer, determine what modes are reachable from the start node.
@@ -483,17 +496,18 @@ class GCSforBlocks:
         READY
         If a mode belongs to a layer, all of its sets belong to a layer.
         """
-        assert len(self.modes_per_layer) == self.horizon, "Must populate modes per layer first"
+        assert (
+            len(self.modes_per_layer) == self.horizon
+        ), "Must populate modes per layer first"
         # for each layer up to the horizon
-        for h in range(self.horizon):
-            self.sets_per_layer[h] = set()
+        for layer in range(self.horizon):
+            self.sets_per_layer[layer] = set()
             # for each mode in that layer
-            for mode_in_layer in self.modes_per_layer[h]:
+            for mode_in_layer in self.modes_per_layer[layer]:
                 # for each set in that mode
                 for set_in_mode in self.sets_per_mode[mode_in_layer]:
                     # add that set to the (set of sets) at that layer
-                    self.sets_per_layer[h].add(set_in_mode)
-
+                    self.sets_per_layer[layer].add(set_in_mode)
 
     ###################################################################################
     # Get edges in and out of a set
@@ -504,7 +518,9 @@ class GCSforBlocks:
         Use the edge matrix to determine which edges go into the vertex.
         """
         assert 0 <= set_id < self.num_gcs_sets, "Set number out of bounds"
-        return [v for v in range(self.num_gcs_sets) if self.set_graph_edges[v, set_id] == 1]
+        return [
+            v for v in range(self.num_gcs_sets) if self.set_graph_edges[v, set_id] == 1
+        ]
 
     def get_edges_out_of_set(self, set_id: int) -> T.List[int]:
         """
@@ -512,7 +528,9 @@ class GCSforBlocks:
         Use the edge matrix to determine which edges go out of the vertex.
         """
         assert 0 <= set_id < self.num_gcs_sets, "Set number out of bounds"
-        return [v for v in range(self.num_gcs_sets) if self.set_graph_edges[set_id, v] == 1]
+        return [
+            v for v in range(self.num_gcs_sets) if self.set_graph_edges[set_id, v] == 1
+        ]
 
     ###################################################################################
     # Vertex and edge naming

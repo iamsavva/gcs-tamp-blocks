@@ -1,5 +1,6 @@
 from colorama import Fore
 
+
 def ERROR(*texts):
     print(Fore.RED + " ".join([str(text) for text in texts]))
 

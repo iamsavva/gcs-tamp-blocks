@@ -1,3 +1,4 @@
+from turtle import left
 import typing as T
 
 import numpy as np
@@ -106,10 +107,10 @@ class GCSforBlocks:
 
     def build_the_graph(
         self,
-        initial_state: Point,
-        initial_mode: int,
-        final_state: Point,
-        final_mode: int,
+        start_state: Point,
+        start_mode: int,
+        target_state: Point,
+        target_mode: int,
     ) -> None:
         """
         READY
@@ -120,19 +121,17 @@ class GCSforBlocks:
         self.graph_built = False
 
         # hand-built pre-processing of the graph
-        self.populate_important_things(initial_mode)
+        self.populate_important_things(start_mode)
 
-        # populate the graph nodes layer by layer
-        for layer in tqdm(range(self.horizon), desc="Adding layers: "):
+        # add the start node and layer 0
+        self.add_start_node(start_state, start_mode)
+
+        # add layers 1 through horizon-1
+        for layer in tqdm(range(1, self.horizon), desc="Adding layers: "):
             self.add_nodes_for_layer(layer)
 
-        # add the start node
-        initial_set_id = self.get_set_id_for_point_and_mode(initial_state, initial_mode)
-        self.add_start_node(initial_state, initial_set_id)
-
         # add the target node
-        # final_set_id = self.get_set_id_for_point_and_mode(final_state, final_mode)
-        self.add_target_node(final_state, final_mode)
+        self.add_target_node(target_state, target_mode)
 
         self.graph_built = True
 
@@ -141,46 +140,85 @@ class GCSforBlocks:
 
     def add_nodes_for_layer(self, layer: int) -> None:
         """
-        NEEDS WORK
+        READY
         The GCS graph is a trellis diagram (finite horizon GCS); each layer contains an entire GCS graph of modes.
         Here we add the nodes, edges, constraints, and costs on the new layer.
         """
+        assert 1 <= layer < self.horizon, "Invalid layer number"
         # for each mode in next layer
         for mode in self.modes_per_layer[layer]:
-            # for each set in that mode
+            # for each set in that mode, add new vertex
             for set_id in self.sets_per_mode[mode]:
-                # add new vertex
                 new_vertex = self.add_vertex(
                     self.get_convex_set_for_set_id(set_id),
                     self.get_vertex_name(layer, set_id),
                 )
-                # TODO: edges in, edges out stuff
-                # edges and costs for layer 0 are populated in add_start_node
-                if layer > 0:
-                    edges_in = self.get_edges_into_set(set_id)
-                    for left_vertex_set_id in edges_in:
-                        # add an edge from previous layer
-                        left_vertex_name = self.get_vertex_name(
-                            layer - 1, left_vertex_set_id
-                        )
-                        left_vertex = self.name_to_vertex[left_vertex_name]
-                        self.add_edge(left_vertex, new_vertex, left_vertex_set_id)
+                # connect it with vertices from previouis layer
+                edges_in = self.get_edges_into_set_out_of_mode(set_id)
+                for left_vertex_set_id in edges_in:
+                    # add an edge from previous layer
+                    left_vertex_name = self.get_vertex_name(
+                        layer - 1, left_vertex_set_id
+                    )
+                    left_vertex = self.name_to_vertex[left_vertex_name]
+                    self.add_edge(left_vertex, new_vertex, left_vertex_set_id)
 
-    def add_start_node(self, start_state: Point, start_set_id: int) -> None:
+
+            # connect the vertices within the mode
+            for left_vertex_set_id in self.sets_per_mode[mode]:
+                connections_within_mode = self.get_edges_within_same_mode(left_vertex_set_id)
+                left_vertex_name = self.get_vertex_name(layer, left_vertex_set_id)
+                left_vertex = self.name_to_vertex[left_vertex_name]
+                # connect left vertex with other vertices within this mode
+                for right_vertex_set_id in connections_within_mode:
+                    right_vertex_name = self.get_vertex_name(layer, right_vertex_set_id)
+                    right_vertex = self.name_to_vertex[right_vertex_name]
+                    self.add_edge(left_vertex, right_vertex, left_vertex_set_id)                
+
+    def add_start_node(self, start_state: Point, start_mode: int) -> None:
         """
-        NEEDS WORK
+        READY
         Adds start node to the graph, as well as edges that connect to it.
         """
-        # add node to the graph
+        # start is connected to each set in start_mode that contains it
+        # horizon 0 contains only start_mode sets
+
+        # add start node to the graph
         start_vertex = self.add_vertex(start_state, "start")
-        # get edges from start
-        # TODO: does get_edges_out_of_set contain out of mode edges? looks like it
-        edges_out = self.get_edges_out_of_set(start_set_id)
-        for right_vertex_set_id in edges_out:
-            # add an edge
-            right_vertex_name = self.get_vertex_name(0, right_vertex_set_id)
+        # sets in start_mode
+        sets_in_start_mode = self.sets_per_mode[start_mode]
+        # add vertices into horizon 0
+        for set_id in sets_in_start_mode:
+            self.add_vertex(
+                self.get_convex_set_for_set_id(set_id),
+                self.get_vertex_name(0, set_id)
+            )
+
+        # obtain sets that contain the start point; these are the sets that start is connected to
+        sets_with_start = []
+        for set_in_mode in sets_in_start_mode:
+            convex_set = self.get_convex_set_for_set_id(set_in_mode)
+            if convex_set.PointInSet(start_state.x()):
+                sets_with_start += [set_in_mode]
+        assert (
+            len(sets_with_start) > 0
+        ), "No set in start mode contains the start point!"
+
+        # add edges from start to the start-mode at horizon 0
+        for set_id in sets_with_start:
+            right_vertex_name = self.get_vertex_name(0, set_id)
             right_vertex = self.name_to_vertex[right_vertex_name]
-            self.add_edge(start_vertex, right_vertex, start_set_id)
+            self.add_edge(start_vertex, right_vertex, set_id, False)
+
+        # add edges within the start-mode at horizon 0
+        for left_vertex_set_id in sets_in_start_mode:
+            connections_within_mode = self.get_edges_within_same_mode(left_vertex_set_id)
+            left_vertex_name = self.get_vertex_name(0, left_vertex_set_id)
+            left_vertex = self.name_to_vertex[left_vertex_name]
+            for right_vertex_set_id in connections_within_mode:
+                right_vertex_name = self.get_vertex_name(0, right_vertex_set_id)
+                right_vertex = self.name_to_vertex[right_vertex_name]
+                self.add_edge(left_vertex, right_vertex, left_vertex_set_id)
 
     def add_target_node(self, target_state: Point, target_mode: int) -> None:
         """
@@ -224,6 +262,7 @@ class GCSforBlocks:
         left_vertex: GraphOfConvexSets.Vertex,
         right_vertex: GraphOfConvexSets.Vertex,
         left_vertex_set_id: int,
+        add_set_transition_constraint = True, # this setting exist to remove redundant constraints for out of start-mode
     ) -> None:
         """
         READY
@@ -236,8 +275,10 @@ class GCSforBlocks:
         # -----------------------------------------------------------------
         # Adding constraints
         # -----------------------------------------------------------------
+        # adding equality constraints
         self.add_orbital_constraint(left_vertex_set_id, edge)
-        self.add_common_set_at_transition_constraint(left_vertex_set_id, edge)
+        if add_set_transition_constraint:
+            self.add_common_set_at_transition_constraint(left_vertex_set_id, edge)
 
         # -----------------------------------------------------------------
         # Adding costs
@@ -324,19 +365,6 @@ class GCSforBlocks:
 
     ###################################################################################
     # Generating convex sets per mode or per set in a mode
-
-    def get_set_id_for_point_and_mode(self, state: Point, mode: int) -> int:
-        """
-        READY
-        Given a mode and a point, find a set that belongs to the mode that includes that point.
-        Note that there may be multiple sets that include this point; set with lowest index is returned.
-        """
-        sets_in_mode = self.sets_per_mode[mode]
-        for set_id in sets_in_mode:
-            convex_set = self.get_convex_set_for_set_id(set_id)
-            if convex_set.PointInSet(state.x()):
-                return set_id
-        assert False, "Given point does not belong to a mode!"
 
     def get_constraint_for_orbit_of_mode(
         self, mode: int
@@ -474,20 +502,20 @@ class GCSforBlocks:
             # mode k is connected only to 0;
             self.set_graph_edges[1:, 0] = np.ones(self.num_gcs_sets - 1)
 
-    def populate_modes_per_layer(self, initial_mode: int) -> None:
+    def populate_modes_per_layer(self, start_mode: int) -> None:
         """
         READY
         For each layer, determine what modes are reachable from the start node.
         """
-        # at horizon 0 with have everything connected to initial_state
-        self.modes_per_layer[0] = set(self.get_edges_out_of_set(initial_mode))
+        # at horizon 0 we have just the start mode
+        self.modes_per_layer[0] = {start_mode}
         # for horizons 1 through h-1:
         for h in range(1, self.horizon):
             modes_at_next_layer = set()
             # for each modes at previous horizon
             for m in self.modes_per_layer[h - 1]:
                 # add anything connected to it
-                for k in self.get_edges_out_of_set(m):
+                for k in self.get_edges_out_of_mode(m):
                     modes_at_next_layer.add(k)
             self.modes_per_layer[h] = modes_at_next_layer
 
@@ -512,9 +540,9 @@ class GCSforBlocks:
     ###################################################################################
     # Get edges in and out of a set
 
-    def get_edges_into_set(self, set_id: int) -> T.List[int]:
+    def get_edges_into_set_out_of_mode(self, set_id: int) -> T.List[int]:
         """
-        READY
+        NEEDS WORK
         Use the edge matrix to determine which edges go into the vertex.
         """
         assert 0 <= set_id < self.num_gcs_sets, "Set number out of bounds"
@@ -522,14 +550,33 @@ class GCSforBlocks:
             v for v in range(self.num_gcs_sets) if self.set_graph_edges[v, set_id] == 1
         ]
 
-    def get_edges_out_of_set(self, set_id: int) -> T.List[int]:
+    def get_edges_within_same_mode(self, set_id: int) -> T.List[int]:
         """
-        READY
+        NEEDS WORK
+        edge matrix should contain only values for out of mode transitions
+        here is where we deal with within-the-mode transitions
+        """
+        assert 0 <= set_id < self.num_gcs_sets, "Set number out of bounds"
+        return []
+
+    def get_edges_out_of_set_out_of_mode(self, set_id: int) -> T.List[int]:
+        """
+        NEEDS WORK
         Use the edge matrix to determine which edges go out of the vertex.
         """
         assert 0 <= set_id < self.num_gcs_sets, "Set number out of bounds"
         return [
             v for v in range(self.num_gcs_sets) if self.set_graph_edges[set_id, v] == 1
+        ]
+
+    def get_edges_out_of_mode(self, mode: int) -> T.List[int]:
+        """
+        READY
+        Use the edge matrix to determine which edges go out of the vertex.
+        """
+        assert 0 <= mode < self.num_modes, "Mode out of bounds"
+        return [
+            v for v in range(self.num_modes) if self.mode_graph_edges[mode, v] == 1
         ]
 
     ###################################################################################
@@ -620,7 +667,7 @@ class GCSforBlocks:
         modes, vertices = self.get_solution_path()
         for i in range(len(vertices)):
             vertices[i] = ["%.1f" % v for v in vertices[i]]
-        mode_now = 0
+        mode_now = self.get_mode_from_vertex_name(modes[1])
         INFO("-----------------------")
         INFO("Solution is:")
         INFO("-----------------------")
@@ -632,7 +679,9 @@ class GCSforBlocks:
                 INFO("Move to", sg, "; Finish")
             else:
                 mode_next = self.get_mode_from_vertex_name(modes[i])
-                if mode_next == 0:
+                if mode_next == mode_now:
+                    grasp = ""
+                elif mode_next == 0:
                     grasp = "Ungrasp block " + str(mode_now)
                 else:
                     grasp = "Grasp   block " + str(mode_next)

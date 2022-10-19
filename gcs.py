@@ -163,17 +163,18 @@ class GCSforBlocks:
                     left_vertex = self.name_to_vertex[left_vertex_name]
                     self.add_edge(left_vertex, new_vertex, left_vertex_set_id)
 
-
             # connect the vertices within the mode
             for left_vertex_set_id in self.sets_per_mode[mode]:
-                connections_within_mode = self.get_edges_within_same_mode(left_vertex_set_id)
+                connections_within_mode = self.get_edges_within_same_mode(
+                    left_vertex_set_id
+                )
                 left_vertex_name = self.get_vertex_name(layer, left_vertex_set_id)
                 left_vertex = self.name_to_vertex[left_vertex_name]
                 # connect left vertex with other vertices within this mode
                 for right_vertex_set_id in connections_within_mode:
                     right_vertex_name = self.get_vertex_name(layer, right_vertex_set_id)
                     right_vertex = self.name_to_vertex[right_vertex_name]
-                    self.add_edge(left_vertex, right_vertex, left_vertex_set_id)                
+                    self.add_edge(left_vertex, right_vertex, left_vertex_set_id)
 
     def add_start_node(self, start_state: Point, start_mode: int) -> None:
         """
@@ -190,8 +191,7 @@ class GCSforBlocks:
         # add vertices into horizon 0
         for set_id in sets_in_start_mode:
             self.add_vertex(
-                self.get_convex_set_for_set_id(set_id),
-                self.get_vertex_name(0, set_id)
+                self.get_convex_set_for_set_id(set_id), self.get_vertex_name(0, set_id)
             )
 
         # obtain sets that contain the start point; these are the sets that start is connected to
@@ -212,7 +212,9 @@ class GCSforBlocks:
 
         # add edges within the start-mode at horizon 0
         for left_vertex_set_id in sets_in_start_mode:
-            connections_within_mode = self.get_edges_within_same_mode(left_vertex_set_id)
+            connections_within_mode = self.get_edges_within_same_mode(
+                left_vertex_set_id
+            )
             left_vertex_name = self.get_vertex_name(0, left_vertex_set_id)
             left_vertex = self.name_to_vertex[left_vertex_name]
             for right_vertex_set_id in connections_within_mode:
@@ -262,7 +264,7 @@ class GCSforBlocks:
         left_vertex: GraphOfConvexSets.Vertex,
         right_vertex: GraphOfConvexSets.Vertex,
         left_vertex_set_id: int,
-        add_set_transition_constraint = True, # this setting exist to remove redundant constraints for out of start-mode
+        add_set_transition_constraint=True,  # this setting exist to remove redundant constraints for out of start-mode
     ) -> None:
         """
         READY
@@ -575,9 +577,7 @@ class GCSforBlocks:
         Use the edge matrix to determine which edges go out of the vertex.
         """
         assert 0 <= mode < self.num_modes, "Mode out of bounds"
-        return [
-            v for v in range(self.num_modes) if self.mode_graph_edges[mode, v] == 1
-        ]
+        return [v for v in range(self.num_modes) if self.mode_graph_edges[mode, v] == 1]
 
     ###################################################################################
     # Vertex and edge naming

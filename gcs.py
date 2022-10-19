@@ -1,4 +1,3 @@
-from turtle import left
 import typing as T
 
 import numpy as np

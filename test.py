@@ -52,6 +52,6 @@ def make_some_simple_transparent_tests():
 def just_one_simple_test():
     INFO("--------------------------")
     INFO("Test case: 1D, 3 blocks\n")
-    make_simple_transparent_gcs_test(1, 3, 7)
+    make_simple_transparent_gcs_test(2, 3, 15)
 
 just_one_simple_test()

@@ -677,7 +677,7 @@ class GCSforBlocks:
         self,
         obstacles: T.List[HPolyhedron],
         domain: HPolyhedron,
-        max_num_sets: int = 10,
+        max_num_sets: int = 9,
         max_num_samples: int = 100,
     ) -> T.List[HPolyhedron]:
         """
@@ -703,17 +703,8 @@ class GCSforBlocks:
                     break
             if not sample_not_inside_obstacle_or_existing_sets:
                 continue
-            # if sample is not in any obstacles:
-            # INFO("Running IRIS")
-            # print("OBSTACLES")
-            # for obstacle in obstacles:
-            #     print(obstacle.A(), obstacle.b())
-            # print("SAMPLE")
-            # print(new_sample)
-            # print("DOMAIN")
-            # print(domain.A(), domain.b())
             convex_set = Iris(obstacles, new_sample, domain)
-            # INFO("Adding")
+
             convex_sets.append(convex_set)
             if len(convex_sets) == max_num_sets:
                 INFO("found max number of convex sets")
@@ -748,10 +739,8 @@ class GCSforBlocks:
                 # get convex sets that belong to this mode
                 sets_in_mode = self.get_convex_tesselation_for_mode(mode)
                 self.sets_per_mode[mode] = set()
-                # add each set
                 print("mode ", mode, "has convex sets:", len(sets_in_mode))
                 for some_set in sets_in_mode:
-                    # print(some_set)
                     some_set = some_set.ReduceInequalities()
                     self.sets_per_mode[mode].add(set_indexer)
                     self.set_id_to_polyhedron[set_indexer] = some_set

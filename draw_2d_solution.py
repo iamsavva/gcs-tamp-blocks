@@ -4,7 +4,7 @@ import numpy as np
 import numpy.typing as npt
 
 # from gcs import GCSforBlocks
-from test import make_simple_transparent_gcs_test
+from test import make_simple_transparent_gcs_test, make_simple_swap_two, make_simple_swap_three
 
 try:
     from tkinter import Tk, Canvas, Toplevel
@@ -21,18 +21,18 @@ ARM_NOT_EMPTY_COLOR = "#5E3886"  # 5E3886 621940
 TEXT_COLOR = "#0B032D"
 BLACK = "#0B032D"
 BACKGROUND = "#F5E9E2"
-
+CELL_WIDTH = 100
 
 class Draw2DSolution:
     def __init__(self, num_modes: int, ub: float, mode_solution, vertex_solution, goal):
         assert num_modes - 1 <= len(BLOCK_COLORS), "Not enough block colors"
         self.num_modes = num_modes
         self.ub = ub
-        self.cell_scaling = 50
-        self.block_size = 50
-        self.arm_size = 50
+        self.cell_scaling = CELL_WIDTH
+        self.block_size = CELL_WIDTH
+        self.arm_size = CELL_WIDTH
         self.padding = self.block_size / 2
-        self.border = 10
+        self.border = 20
 
         self.mode = mode_solution
         self.vertex = vertex_solution
@@ -225,11 +225,15 @@ class Draw2DSolution:
             self.draw_shadow(self.goal[2 * i : 2 * i + 2], i)
 
 
-block_dim = 2
-num_blocks = 3
-horizon = 10
+# block_dim = 2
+num_blocks = 2
+horizon = 12
+use_convex_relaxation=False
 
-gcs, ub, goal = make_simple_transparent_gcs_test(block_dim, num_blocks, horizon, max_rounded_paths=100)
+# gcs, ub, goal = make_simple_swap_two(horizon, max_rounded_paths=200, use_convex_relaxation=use_convex_relaxation)
+gcs, ub, goal = make_simple_swap_three(horizon, max_rounded_paths=200, use_convex_relaxation=use_convex_relaxation)
+
+# gcs, ub, goal = make_simple_transparent_gcs_test(block_dim, num_blocks, horizon, max_rounded_paths=200, use_convex_relaxation=use_convex_relaxation)
 
 assert gcs.solution.is_success(), "Solution was not found"
 modes, vertices = gcs.get_solution_path()

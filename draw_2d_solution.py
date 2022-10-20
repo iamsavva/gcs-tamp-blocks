@@ -22,6 +22,7 @@ TEXT_COLOR = "#0B032D"
 BLACK = "#0B032D"
 BACKGROUND = "#F5E9E2"
 
+
 class Draw2DSolution:
     def __init__(self, num_modes: int, ub: float, mode_solution, vertex_solution, goal):
         assert num_modes - 1 <= len(BLOCK_COLORS), "Not enough block colors"
@@ -30,7 +31,7 @@ class Draw2DSolution:
         self.cell_scaling = 55
         self.block_size = 50
         self.arm_size = 50
-        self.padding = self.block_size/2
+        self.padding = self.block_size / 2
         self.border = 10
 
         self.mode = mode_solution
@@ -59,7 +60,10 @@ class Draw2DSolution:
         self.environment = []
 
     def get_pixel_location(self, loc):
-        return loc[0] * self.cell_scaling + self.padding + self.border, loc[1] * self.cell_scaling + self.padding + self.border
+        return (
+            loc[0] * self.cell_scaling + self.padding + self.border,
+            loc[1] * self.cell_scaling + self.padding + self.border,
+        )
 
     def draw_solution(self):
         vertex = self.vertex
@@ -67,7 +71,7 @@ class Draw2DSolution:
 
         state_now = vertex[0, :]
         mode_now = mode[1]
-        if mode_now == '0':
+        if mode_now == "0":
             self.grasping = False
         # draw initial state
         self.draw_state(state_now)
@@ -82,7 +86,7 @@ class Draw2DSolution:
                 if mode_next == "target":
                     self.draw_state(state_next)
                     time.sleep(2.0)
-                elif mode_next != '0':
+                elif mode_next != "0":
                     self.grasping = True
                 else:
                     self.grasping = False
@@ -156,7 +160,7 @@ class Draw2DSolution:
     def draw_shadow(self, state, name):
         x, y = self.get_pixel_location(state)
         side = self.block_size / 2.0
-        if name == 'arm':
+        if name == "arm":
             create_func = self.canvas.create_oval
         else:
             create_func = self.canvas.create_rectangle
@@ -166,7 +170,7 @@ class Draw2DSolution:
                 y - side,
                 x + side,
                 y + side,
-                fill='#D3D3D3',
+                fill="#D3D3D3",
                 outline="grey",
                 width=2,
             ),
@@ -174,20 +178,51 @@ class Draw2DSolution:
         ]
 
     def draw_background(self):
-        self.environment.append([
-            self.canvas.create_rectangle(0, 0, self.border, self.width, fill='black', outline='black', width=0),
-            self.canvas.create_rectangle(0, 0, self.width, self.border, fill='black', outline='black', width=0),
-            self.canvas.create_rectangle(0, self.width-self.border, self.width, self.width, fill='black', outline='black', width=0),
-            self.canvas.create_rectangle(self.width-self.border, 0, self.width, self.width, fill='black', outline='black', width=0),
-        ])
+        self.environment.append(
+            [
+                self.canvas.create_rectangle(
+                    0,
+                    0,
+                    self.border,
+                    self.width,
+                    fill="black",
+                    outline="black",
+                    width=0,
+                ),
+                self.canvas.create_rectangle(
+                    0,
+                    0,
+                    self.width,
+                    self.border,
+                    fill="black",
+                    outline="black",
+                    width=0,
+                ),
+                self.canvas.create_rectangle(
+                    0,
+                    self.width - self.border,
+                    self.width,
+                    self.width,
+                    fill="black",
+                    outline="black",
+                    width=0,
+                ),
+                self.canvas.create_rectangle(
+                    self.width - self.border,
+                    0,
+                    self.width,
+                    self.width,
+                    fill="black",
+                    outline="black",
+                    width=0,
+                ),
+            ]
+        )
 
     def draw_goal(self):
-        self.draw_shadow(self.goal[0:2], 'arm')
+        self.draw_shadow(self.goal[0:2], "arm")
         for i in range(1, self.num_modes):
-            self.draw_shadow(self.goal[2*i:2*i+2], i)
-        
-
-
+            self.draw_shadow(self.goal[2 * i : 2 * i + 2], i)
 
 
 block_dim = 2

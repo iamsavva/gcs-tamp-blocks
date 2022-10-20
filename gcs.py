@@ -1,6 +1,7 @@
 import typing as T
 
 import numpy as np
+import scipy
 import numpy.typing as npt
 
 import pydot
@@ -9,7 +10,7 @@ from IPython.display import Image, display
 import time
 
 import pydrake.geometry.optimization as opt
-from pydrake.geometry.optimization import Point, GraphOfConvexSets, HPolyhedron
+from pydrake.geometry.optimization import Point, GraphOfConvexSets, HPolyhedron, Iris
 from pydrake.solvers import (
     Binding,
     Cost,
@@ -366,8 +367,20 @@ class GCSforBlocks:
         edge.AddCost(Binding[LinearCost](cost, edge.xv()))
 
     ###################################################################################
-    # Sets for modes and orbits, done clean
-    def get_bounding_box_on_x_two_inequalities(self):
+    # Trivial representation transformations
+
+    def get_inequality_form_from_equality_form(self, A:npt.NDArray, b:npt.NDArray)->T.Tuple[npt.NDArray,npt.NDArray]:
+        """
+        Given a set in a form Ax = b return this same set in a form Ax <= b
+        """
+        new_A = np.vstack( (A, -A) )
+        new_b = np.hstack( (b, -b) )
+        return new_A, new_b
+
+    ###################################################################################
+    # Sets for modes, done clean
+
+    def get_bounding_box_on_x_two_inequalities(self)->T.Tuple[npt.NDArray,npt.NDArray,npt.NDArray]:
         """
         Bounding box on x is lb <= x <= ub.
         Returns this inequality in a form lb <= Ax <= ub.
@@ -377,7 +390,7 @@ class GCSforBlocks:
         ub = self.ub
         return A, lb, ub
 
-    def get_bounding_box_on_x_single_inequality(self):
+    def get_bounding_box_on_x_single_inequality(self)->T.Tuple[npt.NDArray,npt.NDArray]:
         """
         Bounding box on x is lb <= x <= ub.
         Returns this inequality in a form Ax <= b
@@ -387,15 +400,7 @@ class GCSforBlocks:
         b = np.hstack( (ub, -lb) )
         return AA, b
 
-    def get_inequality_form_from_equality_form(self, A, b):
-        """
-        Given a set in a form Ax = b return this same set in a form Ax <= b
-        """
-        new_A = np.vstack( (A, -A) )
-        new_b = np.hstack( (b, -b) )
-        return new_A, new_b
-
-    def get_plane_for_grasping_modes_equality(self, mode:int):
+    def get_plane_for_grasping_modes_equality(self, mode:int)->T.Tuple[npt.NDArray,npt.NDArray]:
         """
         When gasping block m, x_0 = x_m. The plane of possible states when in mode k is given by
         x_0 - x_k = 0.
@@ -409,7 +414,7 @@ class GCSforBlocks:
         b = np.zeros(d)
         return A, b
         
-    def get_plane_for_grasping_modes_inequality(self, mode:int):
+    def get_plane_for_grasping_modes_inequality(self, mode:int)->T.Tuple[npt.NDArray,npt.NDArray]:
         """
         When gasping block m, x_0 = x_m. The plane of possible states when in mode k is given by
         x_0 - x_k = 0.
@@ -419,7 +424,7 @@ class GCSforBlocks:
         return self.get_inequality_form_from_equality_form(A, b)
 
 
-    def get_convex_set_for_mode_inequality(self, mode: int):
+    def get_convex_set_for_mode_inequality(self, mode: int)->T.Tuple[npt.NDArray,npt.NDArray]:
         """
         Convex set for mode 0 is just the bounding box.
         Convex set for mode k is the bounding box and a plane.
@@ -434,14 +439,127 @@ class GCSforBlocks:
             b = np.hstack( (b_bounding, b_plane) )
             return A, b
 
-    def get_convex_set_for_mode_polyhedron(self, mode):
-        """
-        Convex set for mode 0 is just the bounding box.
-        Convex set for mode k is the bounding box and a plane.
-        Returns a convex set as a HPolyhedron.
-        """
+    def get_convex_set_for_mode_polyhedron(self, mode:int)->HPolyhedron:
+        """ See get_convex_set_for_mode_inequality """
         A, b = self.get_convex_set_for_mode_inequality(mode)
         return HPolyhedron(A, b)
+
+    ###################################################################################
+    # Obstacles
+    def obstacle_in_configuration_space_inequality(self, block:int)->T.Tuple[npt.NDArray,npt.NDArray]:
+        """
+        When in mode 0, there are no obstacles.
+        When in mode m, block m cannot collide with other blocks. Other block is given as an obstacle:
+        |x_block - x_m| <= block_width
+        Since x_m = x_0 in mode k, we have:
+        |x_block - x_0| <= block_width
+
+        Returns this obstacle in configuration space as an inequality Ax<=b 
+        """
+        # TODO: should I also add constraint on mode? so both on 0 and on mode?
+        # TODO: should I add a boundary?
+        d = self.block_dim
+        n = self.state_dim
+        A = np.zeros( (d, n) )
+        A[:, 0:d] = np.eye(d)
+        A[:, block*d:(block+1)*d] = -np.eye(d)
+        b = np.ones(d) * self.block_width
+        A = np.vstack( (A,-A) )
+        b = np.hstack( (b,b) )
+        return A, b
+
+    def obstacle_in_configuration_space_polyhedron(self, block:int)->HPolyhedron:
+        """ See obstacle_in_configuration_space_inequality """
+        A, b = self.obstacle_in_configuration_space_inequality(block)
+        return HPolyhedron(A, b)
+
+    ###################################################################################
+    # Mode space transformation
+
+    def transformation_between_configuration_and_mode_space(self, mode:int)->T.Tuple[npt.NDArray,npt.NDArray]:
+        """
+        Contact-with-block modes are planes in R^n: Ax=b.
+        Instead of operating in a n-dimensional space, we can operate on an affine space that is a nullspace of A:
+        for x_0 s.t. Ax_0 = b and N = matrix of vectors of the nullspace of A, we have:
+        any x, s.t. Ax=b is given by x = x_0 + Ny, where y is of dimension of the nullspace of A.
+        This function returns some pair x_0 and N.
+        """
+        A, b = self.get_plane_for_grasping_modes_equality(mode)
+        x_0, residuals = np.linalg.lstsq(A, b, rcond=None)[0:2]
+        # print(x_0, residuals)
+        # assert np.allclose(residuals, np.zeros(self.state_dim)), "Residuals non zero when solving Ax=b"
+        N = scipy.linalg.null_space(A)
+        return x_0, N
+
+    def transformation_between_mode_and_configuration_space(self, mode:int)->T.Tuple[npt.NDArray,npt.NDArray]:
+        """
+        We can move from mode space into the configuration space using pseudo inverse
+        """
+        x_0, N = self.transformation_between_configuration_and_mode_space(mode)
+        mpi = np.linalg.pinv(N)
+        return x_0, mpi
+
+    def configuration_space_inequality_in_mode_space_inequality(self, mode:int, A:npt.NDArray, b:npt.NDArray)->T.Tuple[npt.NDArray,npt.NDArray]:
+        """
+        Suppose a polyhedron in configuration space is given by Ax <= b
+        The mode space for mode is x = x_0 + Ny
+        Plugging in, we have obstacle in mode space:
+        Ax_0 + ANy <= b
+        ANy <= b-Ax_0
+        returns AN, b-Ax_0, which define the obstacle in mode space
+        """
+        # get transformation into mode space
+        x_0, N = self.transformation_between_configuration_and_mode_space(mode)
+        return A.dot(N), (b-A.dot(x_0))
+
+    def configuration_space_obstacle_in_mode_space(self, mode:int, block: int)->HPolyhedron:
+        """
+        See inequality_polyhedron_in_mode_space_inequality.
+        """
+        # get obstacle
+        A,b = self.obstacle_in_configuration_space_inequality(block)
+        A_m, b_m = self.configuration_space_inequality_in_mode_space_inequality(mode, A, b)
+        return HPolyhedron(A_m, b_m)
+
+    def mode_space_polyhedron_in_configuration_space(self, mode:int, poly:HPolyhedron)->HPolyhedron:
+        """
+        we can transform polyhedrons in configuration space into polyhedrons in mode space
+        """
+        A,b = poly.A(), poly.b()
+        x_0, mpi = self.transformation_between_mode_and_configuration_space(mode)
+        A_c = A.dot(mpi)
+        b_c = b + A.dot( mpi.dot(x_0) )
+        return HPolyhedron(A_c, b_c)
+
+    ###################################################################################
+    # Running IRIS
+    def get_convex_tesselation_for_mode(self, mode:int):
+        # get mode space obstacles
+        obstacle_blocks = [i for i in range(1, self.num_modes) if i != mode]
+        mode_space_obstacles = [self.configuration_space_obstacle_in_mode_space(mode, block) for block in obstacle_blocks]
+        # get mode space domain
+        conf_space_dom_A, conf_space_dom_b = self.get_bounding_box_on_x_single_inequality()
+        mode_space_dom_A, mode_space_dom_b = self.configuration_space_inequality_in_mode_space_inequality(mode, conf_space_dom_A, conf_space_dom_b)
+        mode_space_domain = HPolyhedron(mode_space_dom_A, mode_space_dom_b)
+        # sample k points with IRIS
+
+    def get_IRIS_tesselation(self, obstacles, domain, max_num_sets=10, max_num_samples=100):
+        sample_counter = 0
+        previous_sample = None
+        while sample_counter < max_num_samples:
+            # sample a point
+            sample_counter += 1
+            if previous_sample is None:
+                new_sample = domain.UniformSample()
+            else:
+                new_sample = domain.UniformSample(previous_sample)
+                previous_sample = new_sample
+            # check that a sampled point
+            
+
+
+    ###################################################################################
+    # Orbital sets and constraints
 
     def get_orbit_set_for_mode_equality(self, mode: int):
         """

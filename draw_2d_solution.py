@@ -3,7 +3,7 @@ import typing as T
 import numpy as np
 import numpy.typing as npt
 
-from gcs import GCSforBlocks
+# from gcs import GCSforBlocks
 from test import make_simple_transparent_gcs_test
 
 try:
@@ -11,9 +11,6 @@ try:
 except ImportError:
     from Tkinter import Tk, Canvas, Toplevel
 
-import colorsys
-# from sim.util.utils import user_input
-# import sys
 
 import time
 
@@ -24,12 +21,6 @@ ARM_NOT_EMPTY_COLOR = "#5E3886"  # 5E3886 621940
 TEXT_COLOR = "#0B032D"
 BLACK = "#0B032D"
 BACKGROUND = "#F5E9E2"
-
-ARM_SIZE = 20
-BLOCK_SIZE = 25
-GRID_SIZE = 30
-OBSTACLE_COLOR = 'black'
-
 
 class Draw2DSolution:
     def __init__(self, num_modes: int, ub: float, mode_solution, vertex_solution, goal):
@@ -45,8 +36,8 @@ class Draw2DSolution:
         self.mode = mode_solution
         self.vertex = vertex_solution
 
-        self.speed = 2  # units/s
-        self.grasp_dt = 0.75  # s
+        self.speed = 4  # units/s
+        self.grasp_dt = 0.4  # s
         self.move_dt = 0.025  # s
 
         self.grasping = False
@@ -183,10 +174,6 @@ class Draw2DSolution:
         ]
 
     def draw_background(self):
-        num_lines = self.num_modes
-        for i in range(1, num_lines+1):
-            self.environment.append(self.canvas.create_line(0, i/(num_lines+1)*self.width, self.width, i/(num_lines+1)*self.width, fill='grey', width = 1 ))
-            self.environment.append(self.canvas.create_line(i/(num_lines+1)*self.width, 0, i/(num_lines+1)*self.width, self.width, fill='grey', width = 1 ))
         self.environment.append([
             self.canvas.create_rectangle(0, 0, self.border, self.width, fill='black', outline='black', width=0),
             self.canvas.create_rectangle(0, 0, self.width, self.border, fill='black', outline='black', width=0),

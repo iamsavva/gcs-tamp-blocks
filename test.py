@@ -10,6 +10,8 @@ def make_simple_swap_two(horizon=10, max_rounded_paths=200, use_convex_relaxatio
     block_dim = 2
     
     gcs = GCSforBlocks(block_dim, num_blocks, horizon)
+    gcs.no_cycles = False
+    gcs.problem_complexity = "obstacles"
 
     width = 1
     ub = 2
@@ -41,6 +43,8 @@ def make_simple_swap_three(horizon=10, max_rounded_paths=200, use_convex_relaxat
     block_dim = 2
     
     gcs = GCSforBlocks(block_dim, num_blocks, horizon)
+    gcs.no_cycles = True
+    gcs.problem_complexity = "obstacles"
 
     width = 1
     ub = 3
@@ -76,11 +80,12 @@ def make_simple_transparent_gcs_test(
     display_graph: bool = False,
 ) -> GCSforBlocks:
     gcs = GCSforBlocks(block_dim, num_blocks, horizon)
-
     width = 1
     ub = width * 2 * (num_blocks + 1)
     gcs.set_block_width(width)
     gcs.set_ub(ub)
+    gcs.no_cycles = False
+    gcs.problem_complexity = "transparent-no-obstacles"
 
     initial_state = []
     for i in range(gcs.num_modes):

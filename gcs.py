@@ -41,6 +41,8 @@ class GCSforBlocks:
     # problem_complexity = "transparent-no-obstacles"
     problem_complexity = "obstacles"
 
+    no_cycles = False
+
     ###################################################################################
     # Properties, inits, setter functions
 
@@ -157,33 +159,48 @@ class GCSforBlocks:
                     self.get_convex_set_for_set_id(set_id),
                     self.get_vertex_name(layer, set_id),
                 )
-                # connect it with vertices from previouis layer
-                edges_in = self.get_edges_into_set_out_of_mode(set_id)
-                for left_vertex_set_id in edges_in:
-                    # add an edge from previous layer
-                    left_vertex_name = self.get_vertex_name(
-                        layer - 1, left_vertex_set_id
+                if not self.no_cycles:
+                    # connect it with vertices from previouis layer
+                    edges_in = self.get_edges_into_set_out_of_mode(set_id)
+                    for left_vertex_set_id in edges_in:
+                        # add an edge from previous layer
+                        left_vertex_name = self.get_vertex_name(
+                            layer - 1, left_vertex_set_id
+                        )
+                        left_vertex = self.name_to_vertex[left_vertex_name]
+                        self.add_edge(left_vertex, new_vertex, left_vertex_set_id)
+                else:
+                    # connect it with vertices from previouis layer
+                    edges_in = self.get_edges_into_set(set_id)
+                    for left_vertex_set_id in edges_in:
+                        # add an edge from previous layer
+                        left_vertex_name = self.get_vertex_name(
+                            layer - 1, left_vertex_set_id
+                        )
+                        try:
+                            left_vertex = self.name_to_vertex[left_vertex_name]
+                            self.add_edge(left_vertex, new_vertex, left_vertex_set_id)
+                        except:
+                            pass
+            
+            if not self.no_cycles:
+                # connect the vertices within the mode
+                for left_vertex_set_id in self.sets_per_mode[mode]:
+                    connections_within_mode = self.get_edges_within_same_mode(
+                        left_vertex_set_id
                     )
+                    left_vertex_name = self.get_vertex_name(layer, left_vertex_set_id)
                     left_vertex = self.name_to_vertex[left_vertex_name]
-                    self.add_edge(left_vertex, new_vertex, left_vertex_set_id)
-
-            # connect the vertices within the mode
-            for left_vertex_set_id in self.sets_per_mode[mode]:
-                connections_within_mode = self.get_edges_within_same_mode(
-                    left_vertex_set_id
-                )
-                left_vertex_name = self.get_vertex_name(layer, left_vertex_set_id)
-                left_vertex = self.name_to_vertex[left_vertex_name]
-                # connect left vertex with other vertices within this mode
-                for right_vertex_set_id in connections_within_mode:
-                    right_vertex_name = self.get_vertex_name(layer, right_vertex_set_id)
-                    right_vertex = self.name_to_vertex[right_vertex_name]
-                    self.add_edge(
-                        left_vertex,
-                        right_vertex,
-                        left_vertex_set_id,
-                        add_grasp_cost=False,
-                    )
+                    # connect left vertex with other vertices within this mode
+                    for right_vertex_set_id in connections_within_mode:
+                        right_vertex_name = self.get_vertex_name(layer, right_vertex_set_id)
+                        right_vertex = self.name_to_vertex[right_vertex_name]
+                        self.add_edge(
+                            left_vertex,
+                            right_vertex,
+                            left_vertex_set_id,
+                            add_grasp_cost=False,
+                        )
 
     def add_start_node(self, start_state: Point, start_mode: int) -> None:
         """
@@ -224,20 +241,20 @@ class GCSforBlocks:
                 add_set_transition_constraint=False,
                 add_grasp_cost=False,
             )
-
-        # add edges within the start-mode at horizon 0
-        for left_vertex_set_id in sets_in_start_mode:
-            connections_within_mode = self.get_edges_within_same_mode(
-                left_vertex_set_id
-            )
-            left_vertex_name = self.get_vertex_name(0, left_vertex_set_id)
-            left_vertex = self.name_to_vertex[left_vertex_name]
-            for right_vertex_set_id in connections_within_mode:
-                right_vertex_name = self.get_vertex_name(0, right_vertex_set_id)
-                right_vertex = self.name_to_vertex[right_vertex_name]
-                self.add_edge(
-                    left_vertex, right_vertex, left_vertex_set_id, add_grasp_cost=False
+        if not self.no_cycles:
+            # add edges within the start-mode at horizon 0
+            for left_vertex_set_id in sets_in_start_mode:
+                connections_within_mode = self.get_edges_within_same_mode(
+                    left_vertex_set_id
                 )
+                left_vertex_name = self.get_vertex_name(0, left_vertex_set_id)
+                left_vertex = self.name_to_vertex[left_vertex_name]
+                for right_vertex_set_id in connections_within_mode:
+                    right_vertex_name = self.get_vertex_name(0, right_vertex_set_id)
+                    right_vertex = self.name_to_vertex[right_vertex_name]
+                    self.add_edge(
+                        left_vertex, right_vertex, left_vertex_set_id, add_grasp_cost=False
+                    )
 
     def add_target_node(self, target_state: Point, target_mode: int) -> None:
         """
@@ -809,10 +826,16 @@ class GCSforBlocks:
         Mode connectivity.
         """
         self.mode_graph_edges = np.zeros((self.num_modes, self.num_modes))
-        # mode 0 is connected to any other mode except itself
-        self.mode_graph_edges[0, 1:] = np.ones(self.num_modes - 1)
-        # mode k is connected only to 0;
-        self.mode_graph_edges[1:, 0] = np.ones(self.num_modes - 1)
+        if self.no_cycles:
+            # mode 0 is connected to any other mode except itself
+            self.mode_graph_edges[0, :] = np.ones(self.num_modes)
+            # mode k is connected only to 0;
+            self.mode_graph_edges[:, 0] = np.ones(self.num_modes)
+        else:
+            # mode 0 is connected to any other mode except itself
+            self.mode_graph_edges[0, 1:] = np.ones(self.num_modes - 1)
+            # mode k is connected only to 0;
+            self.mode_graph_edges[1:, 0] = np.ones(self.num_modes - 1)
 
     def populate_edges_between_sets(self) -> None:
         """
@@ -923,7 +946,8 @@ class GCSforBlocks:
             # for each mode that enters into our mode
             modes_into_me = self.get_edges_into_mode(mode)
             for other_mode in modes_into_me:
-                assert other_mode != mode
+                if not self.no_cycles:
+                    assert other_mode != mode
                 # for each set in that other mode
                 for i in self.sets_per_mode[other_mode]:
                     # check if there is an edge
@@ -974,7 +998,12 @@ class GCSforBlocks:
                         edges.append(i)
             return edges
         raise NotImplementedError
+
+    def get_edges_into_set(self, set_id):
+        return self.get_edges_into_set_out_of_mode(set_id) + self.get_edges_within_same_mode(set_id)
         
+    def get_edges_out_of_set(self, set_id):
+        return self.get_edges_out_of_set_out_of_mode(set_id) + self.get_edges_within_same_mode(set_id)
 
     def get_edges_out_of_mode(self, mode: int) -> T.List[int]:
         """

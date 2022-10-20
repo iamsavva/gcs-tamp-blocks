@@ -39,6 +39,8 @@ class Draw2DSolution:
 
         self.speed = 4  # units/s
         self.grasp_dt = 0.4  # s
+        # self.speed = 2  # units/s
+        # self.grasp_dt = 0.7  # s
         self.move_dt = 0.025  # s
 
         self.grasping = False
@@ -75,7 +77,7 @@ class Draw2DSolution:
             self.grasping = False
         # draw initial state
         self.draw_state(state_now)
-        time.sleep(1.0)
+        time.sleep(5.0)
 
         for i in range(1, len(vertex)):
             state_next = vertex[i, :]
@@ -225,20 +227,24 @@ class Draw2DSolution:
             self.draw_shadow(self.goal[2 * i : 2 * i + 2], i)
 
 
-# block_dim = 2
-num_blocks = 2
-horizon = 12
+block_dim = 2
+
+num_blocks = 5
+# num_blocks = 3
+horizon = 7
 use_convex_relaxation=False
 
 # gcs, ub, goal = make_simple_swap_two(horizon, max_rounded_paths=200, use_convex_relaxation=use_convex_relaxation)
-gcs, ub, goal = make_simple_swap_three(horizon, max_rounded_paths=200, use_convex_relaxation=use_convex_relaxation)
+# gcs, ub, goal = make_simple_swap_three(horizon, max_rounded_paths=200, use_convex_relaxation=use_convex_relaxation)
 
-# gcs, ub, goal = make_simple_transparent_gcs_test(block_dim, num_blocks, horizon, max_rounded_paths=200, use_convex_relaxation=use_convex_relaxation)
+gcs, ub, goal = make_simple_transparent_gcs_test(block_dim, num_blocks, horizon, max_rounded_paths=200, use_convex_relaxation=use_convex_relaxation)
 
 assert gcs.solution.is_success(), "Solution was not found"
 modes, vertices = gcs.get_solution_path()
 for i in range(len(vertices)):
     vertices[i] = ["%.1f" % v for v in vertices[i]]
 
+print(modes)
+print(vertices)
 drawer = Draw2DSolution(num_blocks + 1, ub, modes, vertices, goal)
 drawer.draw_solution()

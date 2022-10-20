@@ -11,7 +11,7 @@ def make_simple_transparent_gcs_test(
     horizon: int,
     max_rounded_paths: int = 30,
     display_graph: bool = False,
-)->GCSforBlocks:
+) -> GCSforBlocks:
     gcs = GCSforBlocks(block_dim, num_blocks, horizon)
 
     width = 1
@@ -36,7 +36,7 @@ def make_simple_transparent_gcs_test(
     gcs.verbose_solution_description()
     if display_graph:
         gcs.display_graph()
-    return gcs
+    return gcs, ub, final_state
 
 
 def make_some_simple_transparent_tests():
@@ -57,4 +57,4 @@ def just_one_simple_test():
     make_simple_transparent_gcs_test(2, 3, 15)
 
 
-just_one_simple_test()
+# just_one_simple_test()

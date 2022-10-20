@@ -657,6 +657,7 @@ class GCSforBlocks:
         # using these edges, find the path from start to target
         path = self.find_path_to_target(active_edges, self.name_to_vertex["start"])
         modes = [v.name() for v in path]
+        modes = [str(self.get_mode_from_vertex_name(mode)) if mode not in("start", "target") else mode for mode in modes ]
         vertex_values = np.vstack([self.solution.GetSolution(v.x()) for v in path])
         return modes, vertex_values
 
@@ -666,7 +667,7 @@ class GCSforBlocks:
         modes, vertices = self.get_solution_path()
         for i in range(len(vertices)):
             vertices[i] = ["%.1f" % v for v in vertices[i]]
-        mode_now = self.get_mode_from_vertex_name(modes[1])
+        mode_now = modes[1]
         INFO("-----------------------")
         INFO("Solution is:")
         INFO("-----------------------")
@@ -677,7 +678,7 @@ class GCSforBlocks:
             elif modes[i] == "target":
                 INFO("Move to", sg, "; Finish")
             else:
-                mode_next = self.get_mode_from_vertex_name(modes[i])
+                mode_next = modes[i]
                 if mode_next == mode_now:
                     grasp = ""
                 elif mode_next == 0:

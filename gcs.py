@@ -173,7 +173,7 @@ class GCSforBlocks:
                 for right_vertex_set_id in connections_within_mode:
                     right_vertex_name = self.get_vertex_name(layer, right_vertex_set_id)
                     right_vertex = self.name_to_vertex[right_vertex_name]
-                    self.add_edge(left_vertex, right_vertex, left_vertex_set_id)
+                    self.add_edge(left_vertex, right_vertex, left_vertex_set_id, add_grasp_cost=False)
 
     def add_start_node(self, start_state: Point, start_mode: int) -> None:
         """
@@ -207,7 +207,7 @@ class GCSforBlocks:
         for set_id in sets_with_start:
             right_vertex_name = self.get_vertex_name(0, set_id)
             right_vertex = self.name_to_vertex[right_vertex_name]
-            self.add_edge(start_vertex, right_vertex, set_id, False)
+            self.add_edge(start_vertex, right_vertex, set_id, add_set_transition_constraint=False, add_grasp_cost=False)
 
         # add edges within the start-mode at horizon 0
         for left_vertex_set_id in sets_in_start_mode:
@@ -219,7 +219,7 @@ class GCSforBlocks:
             for right_vertex_set_id in connections_within_mode:
                 right_vertex_name = self.get_vertex_name(0, right_vertex_set_id)
                 right_vertex = self.name_to_vertex[right_vertex_name]
-                self.add_edge(left_vertex, right_vertex, left_vertex_set_id)
+                self.add_edge(left_vertex, right_vertex, left_vertex_set_id, add_grasp_cost=False)
 
     def add_target_node(self, target_state: Point, target_mode: int) -> None:
         """
@@ -253,7 +253,7 @@ class GCSforBlocks:
                         # add an edge
                         left_vertex_name = self.get_vertex_name(layer, set_id)
                         left_vertex = self.name_to_vertex[left_vertex_name]
-                        self.add_edge(left_vertex, target_vertex, set_id)
+                        self.add_edge(left_vertex, target_vertex, set_id, add_grasp_cost=False)
 
     ###################################################################################
     # Populating edges and vertices
@@ -263,7 +263,8 @@ class GCSforBlocks:
         left_vertex: GraphOfConvexSets.Vertex,
         right_vertex: GraphOfConvexSets.Vertex,
         left_vertex_set_id: int,
-        add_set_transition_constraint=True,  # this setting exist to remove redundant constraints for out of start-mode
+        add_set_transition_constraint:bool=True,  # this setting exist to remove redundant constraints for out of start-mode
+        add_grasp_cost:bool = True
     ) -> None:
         """
         READY
@@ -287,7 +288,7 @@ class GCSforBlocks:
         # add movement cost on the edge
         self.add_gripper_movement_cost_on_edge(edge)
         # add time cost on edge
-        if self.add_time_cost:
+        if add_grasp_cost and self.add_time_cost:
             self.add_time_cost_on_edge(edge)
 
     def add_vertex(
@@ -299,13 +300,11 @@ class GCSforBlocks:
         Define upper/lower boundaries on variables to make CSDP solver happy.
         """
         # create a vertex
-        # TODO: are there bounded polyhedrons?
         vertex = self.gcs.AddVertex(convex_set, name)
         self.name_to_vertex[name] = vertex
-        # add a constraint on each vertex to be within lower/upper bound of the world
-        # TODO: remove lb ub from convex set definition
-        # set_con = LinearConstraint(np.eye(self.state_dim), self.lb, self.ub)
-        # vertex.AddConstraint(Binding[LinearConstraint](set_con, vertex.x()))
+        # TODO: put this check at set generation
+        if not convex_set.IsBounded():
+            WARN("Convex set", name, "is not bounded!")
         return vertex
 
     ###################################################################################
@@ -320,10 +319,8 @@ class GCSforBlocks:
         """
         xu, xv = edge.xu(), edge.xv()
         left_mode = self.get_mode_from_set_id(left_vertex_set_id)
-        A, b = self.get_constraint_for_orbit_of_mode(left_mode)
-
-        eq_con = LinearEqualityConstraint(A, b)
-        edge.AddConstraint(Binding[LinearEqualityConstraint](eq_con, np.append(xv, xu)))
+        orbital_constraint = self.get_orbital_constraint(left_mode)
+        edge.AddConstraint(Binding[LinearEqualityConstraint](orbital_constraint, np.append(xv, xu)))
 
     def add_common_set_at_transition_constraint(
         self, left_vertex_set_id: int, edge: GraphOfConvexSets.Edge
@@ -348,46 +345,141 @@ class GCSforBlocks:
         """
         xu, xv = edge.xu(), edge.xv()
         #  gripper state is 0 to block_dim
-        A = np.zeros((self.block_dim, 2 * self.state_dim))
-        A[:, 0 : self.block_dim] = np.eye(self.block_dim)
-        A[:, self.state_dim : self.state_dim + self.block_dim] = -np.eye(self.block_dim)
-        b = np.zeros(self.block_dim)
+        d = self.block_dim
+        n = self.state_dim
+        A = np.zeros((d, 2 * n))
+        A[:, 0 : d] = np.eye(d)
+        A[:, n : n + d] = -np.eye(d)
+        b = np.zeros(d)
         # add the cost
         cost = L2NormCost(A, b)
-        edge.AddCost(Binding[Cost](cost, np.append(xv, xu)))
+        edge.AddCost(Binding[L2NormCost](cost, np.append(xv, xu)))
 
     def add_time_cost_on_edge(self, edge: GraphOfConvexSets.Edge) -> None:
         """
         READY
         Walking along the edges costs some cosntant term. This is done to avoid grasping and ungrasping in place.
         """
-        cost = LinearCost(np.zeros(self.state_dim), self.time_cost_weight * np.ones(1))
-        edge.AddCost(Binding[Cost](cost, edge.xv()))
+        A = np.zeros(self.state_dim)
+        b = self.time_cost_weight * np.ones(1)
+        cost = LinearCost(A, b)
+        edge.AddCost(Binding[LinearCost](cost, edge.xv()))
 
     ###################################################################################
-    # Generating convex sets per mode or per set in a mode
-
-    def get_constraint_for_orbit_of_mode(
-        self, mode: int
-    ) -> T.Tuple[npt.NDArray[np.float64], npt.NDArray[np.float64]]:
+    # Sets for modes and orbits, done clean
+    def get_bounding_box_on_x_two_inequalities(self):
         """
-        READY
-        Orbital constraint for blocks without pushing
-        Delta x_i is zero for any i != 0, k; k is the mode number
-
-        TODO: this should probably be implemented differently, for it implies constraint A(y-x) == b
+        Bounding box on x is lb <= x <= ub.
+        Returns this inequality in a form lb <= Ax <= ub.
         """
-        k = mode
-        assert k < self.num_modes
-        # v - u
-        A = np.hstack((np.eye(self.state_dim), -np.eye(self.state_dim)))
-        bd = self.block_dim
-        # v_0 - u_0 is not constrained
-        A[0:bd, :] = np.zeros((bd, 2 * self.state_dim))
-        # v_k - u_k is not constrained
-        A[k * bd : (k + 1) * bd, :] = np.zeros((bd, 2 * self.state_dim))
-        b = np.zeros(self.state_dim)
+        A = np.eye(self.state_dim)
+        lb = self.lb
+        ub = self.ub
+        return A, lb, ub
+
+    def get_bounding_box_on_x_single_inequality(self):
+        """
+        Bounding box on x is lb <= x <= ub.
+        Returns this inequality in a form Ax <= b
+        """
+        A, lb, ub = self.get_bounding_box_on_x_two_inequalities()
+        AA = np.vstack( (A,-A) )
+        b = np.hstack( (ub, -lb) )
+        return AA, b
+
+    def get_inequality_form_from_equality_form(self, A, b):
+        """
+        Given a set in a form Ax = b return this same set in a form Ax <= b
+        """
+        new_A = np.vstack( (A, -A) )
+        new_b = np.hstack( (b, -b) )
+        return new_A, new_b
+
+    def get_plane_for_grasping_modes_equality(self, mode:int):
+        """
+        When gasping block m, x_0 = x_m. The plane of possible states when in mode k is given by
+        x_0 - x_k = 0.
+        Returns this plane in the form Ax = b.
+        """
+        d = self.block_dim
+        n = self.state_dim
+        A = np.zeros( (d, n) )
+        A[ 0:d, 0:d ] = np.eye(d)
+        A[ 0:d, mode*d:(mode+1)*d] = -np.eye(d)
+        b = np.zeros(d)
         return A, b
+        
+    def get_plane_for_grasping_modes_inequality(self, mode:int):
+        """
+        When gasping block m, x_0 = x_m. The plane of possible states when in mode k is given by
+        x_0 - x_k = 0.
+        Returns this plane in the form Ax <= b.
+        """
+        A, b = self.get_plane_for_grasping_modes_equality(mode)
+        return self.get_inequality_form_from_equality_form(A, b)
+
+
+    def get_convex_set_for_mode_inequality(self, mode: int):
+        """
+        Convex set for mode 0 is just the bounding box.
+        Convex set for mode k is the bounding box and a plane.
+        Returns a convex set for mode in form Ax <= b.
+        """
+        if mode == 0:
+            return self.get_bounding_box_on_x_single_inequality()
+        else:
+            A_bounding, b_bounding = self.get_bounding_box_on_x_single_inequality()
+            A_plane, b_plane = self.get_plane_for_grasping_modes_inequality(mode)
+            A = np.vstack( (A_bounding, A_plane) )
+            b = np.hstack( (b_bounding, b_plane) )
+            return A, b
+
+    def get_convex_set_for_mode_polyhedron(self, mode):
+        """
+        Convex set for mode 0 is just the bounding box.
+        Convex set for mode k is the bounding box and a plane.
+        Returns a convex set as a HPolyhedron.
+        """
+        A, b = self.get_convex_set_for_mode_inequality(mode)
+        return HPolyhedron(A, b)
+
+    def get_orbit_set_for_mode_equality(self, mode: int):
+        """
+        When in mode k, the orbit is such that x_m-y_m = 0 for m not k nor 0.
+        Produces convex set in a form A [x, y]^T = b
+        """
+        A = None
+        b = None
+        d = self.block_dim
+        n = self.state_dim
+        # for each mode
+        for m in range(self.num_modes):
+            # that is not 0 or mode
+            if m not in (0, mode):
+                # add constraint
+                A_m = np.zeros( (d, 2 * n) )
+                A_m[:, d*m:d*(m+1)] = np.eye(d)
+                A_m[:, n+d*m:n+d*(m+1)] = -np.eye(d)
+                b_m = np.zeros(d)
+                if A is None:
+                    A = A_m
+                    b = b_m
+                else:
+                    A = np.vstack( (A, A_m) )
+                    b = np.hstack( (b, b_m) )
+        return A, b
+
+    def get_orbit_set_for_mode_inequality(self, mode: int):
+        """
+        When in mode k, the orbit is such that x_m-y_m = 0 for m not k nor 0.
+        Produces convex set in a form A [x, y]^T <= b
+        """
+        A, b = self.get_orbit_set_for_mode_equality(mode)
+        return self.get_inequality_form_from_equality_form(A, b)
+
+    def get_orbital_constraint(self, mode:int):
+        A, b = self.get_orbit_set_for_mode_equality(mode)
+        return LinearEqualityConstraint(A, b)
 
     ###################################################################################
     # IRIS
@@ -426,31 +518,8 @@ class GCSforBlocks:
             "transparent-no-obstacles"
         ), "Non-transparent blocks not implemented yet"
         if self.problem_complexity == "transparent-no-obstacles":
-            return self.get_convex_set_for_mode_transparent(set_id)
-
-    def get_convex_set_for_mode_transparent(self, mode: int) -> HPolyhedron:
-        """
-        READY
-        Returns polyhedron:
-        lb <= x <= ub
-        x_0 = x_k
-        (last constrained dropped if k = 0); k is the mode number
-        """
-        k = mode
-        assert k < self.num_modes
-        A = np.vstack((-np.eye(self.state_dim), np.eye(self.state_dim)))
-        b = np.hstack((-self.lb, self.ub))
-        if k == 0:
-            return HPolyhedron(A, b)
-        else:
-            eq_con = np.zeros((self.block_dim, self.state_dim))
-            eq_con[:, 0 : self.block_dim] = np.eye(self.block_dim)
-            eq_con[:, k * self.block_dim : (k + 1) * self.block_dim] = -np.eye(
-                self.block_dim
-            )
-            A = np.vstack((A, eq_con, -eq_con))
-            b = np.hstack((b, np.zeros(self.block_dim), np.zeros(self.block_dim)))
-            return HPolyhedron(A, b)
+            mode = set_id
+            return self.get_convex_set_for_mode_polyhedron(mode)
 
     ###################################################################################
     # Functions related to connectivity between modes and sets within modes
@@ -681,7 +750,7 @@ class GCSforBlocks:
                 mode_next = modes[i]
                 if mode_next == mode_now:
                     grasp = ""
-                elif mode_next == 0:
+                elif mode_next == '0':
                     grasp = "Ungrasp block " + str(mode_now)
                 else:
                     grasp = "Grasp   block " + str(mode_next)

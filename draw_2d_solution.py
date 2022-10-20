@@ -28,7 +28,7 @@ class Draw2DSolution:
         assert num_modes - 1 <= len(BLOCK_COLORS), "Not enough block colors"
         self.num_modes = num_modes
         self.ub = ub
-        self.cell_scaling = 55
+        self.cell_scaling = 50
         self.block_size = 50
         self.arm_size = 50
         self.padding = self.block_size / 2
@@ -227,9 +227,9 @@ class Draw2DSolution:
 
 block_dim = 2
 num_blocks = 3
-horizon = 15
+horizon = 10
 
-gcs, ub, goal = make_simple_transparent_gcs_test(block_dim, num_blocks, horizon)
+gcs, ub, goal = make_simple_transparent_gcs_test(block_dim, num_blocks, horizon, max_rounded_paths=100)
 
 assert gcs.solution.is_success(), "Solution was not found"
 modes, vertices = gcs.get_solution_path()

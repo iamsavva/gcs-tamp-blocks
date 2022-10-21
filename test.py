@@ -81,7 +81,8 @@ def make_simple_transparent_gcs_test(
 ) -> GCSforBlocks:
     gcs = GCSforBlocks(block_dim, num_blocks, horizon)
     width = 1
-    ub = width * 2 * (num_blocks + 1)
+    scaling = 0.5
+    ub = scaling*width * 2 * (num_blocks + 1)
     gcs.set_block_width(width)
     gcs.set_ub(ub)
     gcs.no_cycles = False
@@ -90,13 +91,13 @@ def make_simple_transparent_gcs_test(
     initial_state = []
     for i in range(gcs.num_modes):
         block_state = [0] * gcs.block_dim
-        block_state[0] = width * (2 * i + 1)
+        block_state[0] = scaling*width * (2 * i + 1)
         initial_state += block_state
     initial_point = Point(np.array(initial_state))
     final_state = []
     for i in range(gcs.num_modes):
-        block_state = [0] * gcs.block_dim
-        block_state[-1] = ub - width * (2 * i + 1)
+        block_state = [ub] * gcs.block_dim
+        block_state[0] = ub - scaling*width * (2 * i + 1)
         final_state += block_state
     final_point = Point(np.array(final_state))
     gcs.build_the_graph(initial_point, 0, final_point, 0)

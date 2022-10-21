@@ -37,8 +37,8 @@ class Draw2DSolution:
         self.mode = mode_solution
         self.vertex = vertex_solution
 
-        self.speed = 4  # units/s
-        self.grasp_dt = 0.4  # s
+        self.speed = 10  # units/s
+        self.grasp_dt = 0.3  # s
         # self.speed = 2  # units/s
         # self.grasp_dt = 0.7  # s
         self.move_dt = 0.025  # s
@@ -231,8 +231,8 @@ block_dim = 2
 
 num_blocks = 5
 # num_blocks = 3
-horizon = 7
-use_convex_relaxation=False
+horizon = 12
+use_convex_relaxation=True
 
 # gcs, ub, goal = make_simple_swap_two(horizon, max_rounded_paths=200, use_convex_relaxation=use_convex_relaxation)
 # gcs, ub, goal = make_simple_swap_three(horizon, max_rounded_paths=200, use_convex_relaxation=use_convex_relaxation)

@@ -103,6 +103,8 @@ class GCSforBlocks:
         # reset the graph
         self.gcs = GraphOfConvexSets()
         self.graph_built = False
+        self.start_mode = start_mode
+        self.target_mode = target_mode
 
         # hand-built pre-processing of the graph
         self.populate_important_things(start_mode)
@@ -133,48 +135,36 @@ class GCSforBlocks:
         for mode in self.modes_per_layer[layer]:
             # for each set in that mode, add new vertex
             for set_id in self.sets_per_mode[mode]:
-                new_vertex = self.add_vertex(
-                    self.get_convex_set_for_set_id(set_id),
-                    self.get_vertex_name(layer, set_id),
-                )
-                # connect it with vertices from previouis layer
-                edges_in = self.get_edges_into_set_out_of_mode(set_id)
-                for left_vertex_set_id in edges_in:
-                    # add an edge from previous layer
-                    left_vertex_name = self.get_vertex_name(
-                        layer - 1, left_vertex_set_id
-                    )
-                    left_vertex = self.name_to_vertex[left_vertex_name]
-                    self.add_edge(left_vertex, new_vertex, left_vertex_set_id)
+                vertex_name = self.get_vertex_name(layer, set_id)
+                convex_set = self.get_convex_set_for_set_id(set_id)
+                self.add_vertex(convex_set, vertex_name)
 
-            # connect the vertices within the mode
-            for left_vertex_set_id in self.sets_per_mode[mode]:
-                connections_within_mode = self.get_edges_within_same_mode(
-                    left_vertex_set_id
+            # now add edges
+            # TODO: this should be done more carefully in the future (?)
+            for set_id in self.sets_per_mode[mode]:
+                vertex_name = self.get_vertex_name(layer, set_id)
+
+                # add edges into vertex from the previous layer
+                edges_in = self.get_edges_into_set_out_of_mode(set_id)
+                names_of_edges_in = self.set_names_for_layer(edges_in, layer - 1)
+                self.connect_to_vertex_on_the_left(names_of_edges_in, vertex_name)
+
+                # edges out of vertex into the same mode of same layer
+                intra_mode_in = self.get_edges_within_same_mode(set_id)
+                names_of_intra_mode = self.set_names_for_layer(intra_mode_in, layer)
+                self.connect_to_vertex_on_the_right(
+                    vertex_name, names_of_intra_mode, add_grasp_cost=False
                 )
-                left_vertex_name = self.get_vertex_name(layer, left_vertex_set_id)
-                left_vertex = self.name_to_vertex[left_vertex_name]
-                # connect left vertex with other vertices within this mode
-                for right_vertex_set_id in connections_within_mode:
-                    right_vertex_name = self.get_vertex_name(layer, right_vertex_set_id)
-                    right_vertex = self.name_to_vertex[right_vertex_name]
-                    self.add_edge(
-                        left_vertex,
-                        right_vertex,
-                        left_vertex_set_id,
-                        add_grasp_cost=False,
-                    )
 
     def add_start_node(self, start_state: Point, start_mode: int) -> None:
         """
         READY
         Adds start node to the graph, as well as edges that connect to it.
+        Start is connected to each set in start_mode that contains it
+        Horizon 0 contains only start_mode sets
         """
-        # start is connected to each set in start_mode that contains it
-        # horizon 0 contains only start_mode sets
-
         # add start node to the graph
-        start_vertex = self.add_vertex(start_state, "start")
+        self.add_vertex(start_state, "start")
         # sets in start_mode
         sets_in_start_mode = self.sets_per_mode[start_mode]
         # add vertices into horizon 0
@@ -186,41 +176,31 @@ class GCSforBlocks:
         sets_with_start = []
         for set_in_mode in sets_in_start_mode:
             convex_set = self.get_convex_set_for_set_id(set_in_mode)
-            if convex_set.PointInSet(start_state.x()):
+            if convex_set.IntersectsWith(start_state):
                 sets_with_start += [set_in_mode]
                 if self.opt.connect_source_target_to_single_set:
                     break
         assert (
             len(sets_with_start) > 0
         ), "No set in start mode contains the start point!"
+        names_of_sets_with_start = self.set_names_for_layer(sets_with_start, 0)
 
         # add edges from start to the start-mode at horizon 0
-        for set_id in sets_with_start:
-            right_vertex_name = self.get_vertex_name(0, set_id)
-            right_vertex = self.name_to_vertex[right_vertex_name]
-            self.add_edge(
-                start_vertex,
-                right_vertex,
-                set_id,
-                add_set_transition_constraint=False,
-                add_grasp_cost=False,
-            )
+        self.connect_to_vertex_on_the_right(
+            "start",
+            names_of_sets_with_start,
+            add_set_transition_constraint=False,
+            add_grasp_cost=False,
+        )
+
         # add edges within the start-mode at horizon 0
-        for left_vertex_set_id in sets_in_start_mode:
-            connections_within_mode = self.get_edges_within_same_mode(
-                left_vertex_set_id
+        for set_id in sets_in_start_mode:
+            vertex_name = self.get_vertex_name(0, set_id)
+            intra_mode_in = self.get_edges_within_same_mode(set_id)
+            names_of_intra_mode = self.set_names_for_layer(intra_mode_in, 0)
+            self.connect_to_vertex_on_the_right(
+                vertex_name, names_of_intra_mode, add_grasp_cost=False
             )
-            left_vertex_name = self.get_vertex_name(0, left_vertex_set_id)
-            left_vertex = self.name_to_vertex[left_vertex_name]
-            for right_vertex_set_id in connections_within_mode:
-                right_vertex_name = self.get_vertex_name(0, right_vertex_set_id)
-                right_vertex = self.name_to_vertex[right_vertex_name]
-                self.add_edge(
-                    left_vertex,
-                    right_vertex,
-                    left_vertex_set_id,
-                    add_grasp_cost=False,
-                )
 
     def add_target_node(self, target_state: Point, target_mode: int) -> None:
         """
@@ -228,7 +208,7 @@ class GCSforBlocks:
         Adds target node to the graph, as well as edges that connect to it.
         """
         # add target vertex
-        target_vertex = self.add_vertex(target_state, "target")
+        self.add_vertex(target_state, "target")
 
         # sets in target_mode
         sets_in_target_mode = self.sets_per_mode[target_mode]
@@ -237,29 +217,24 @@ class GCSforBlocks:
         for set_in_mode in sets_in_target_mode:
             convex_set = self.get_convex_set_for_set_id(set_in_mode)
             if convex_set.IntersectsWith(target_state):
-                # if convex_set.PointInSet(target_state.x()):
                 sets_with_target += [set_in_mode]
                 if self.opt.connect_source_target_to_single_set:
                     break
         assert (
             len(sets_with_target) > 0
         ), "No set in target mode contains the target point!"
+        names_of_sets_with_target = []
 
         # at each horizon level, only sets that contain the target can transition into target
-        # at each layer
         for layer in range(self.opt.horizon):
             # if that layer has a target mode
             if target_mode in self.modes_per_layer[layer]:
                 # for each set that contains the target
                 for set_id in sets_with_target:
-                    # this if statement shouldn't be necessary, but still
-                    if set_id in self.sets_per_layer[layer]:
-                        # add an edge
-                        left_vertex_name = self.get_vertex_name(layer, set_id)
-                        left_vertex = self.name_to_vertex[left_vertex_name]
-                        self.add_edge(
-                            left_vertex, target_vertex, set_id, add_grasp_cost=False
-                        )
+                    names_of_sets_with_target += [self.get_vertex_name(layer, set_id)]
+        self.connect_to_vertex_on_the_left(
+            names_of_sets_with_target, "target", add_grasp_cost=False
+        )
 
     ###################################################################################
     # Populating edges and vertices
@@ -268,7 +243,6 @@ class GCSforBlocks:
         self,
         left_vertex: GraphOfConvexSets.Vertex,
         right_vertex: GraphOfConvexSets.Vertex,
-        left_vertex_set_id: int,
         add_set_transition_constraint: bool = True,  # this setting exist to remove redundant constraints for out of start-mode
         add_grasp_cost: bool = True,
     ) -> None:
@@ -284,9 +258,12 @@ class GCSforBlocks:
         # Adding constraints
         # -----------------------------------------------------------------
         # adding equality constraints
-        self.add_orbital_constraint(left_vertex_set_id, edge)
+        # to add an orbital constraint, i need a (mode) set id for the left set.
+        left_mode = self.get_mode_from_vertex_name(left_vertex.name())
+        self.add_orbital_constraint(left_mode, edge)
         if add_set_transition_constraint:
-            self.add_common_set_at_transition_constraint(left_vertex_set_id, edge)
+            left_set_id = self.get_set_id_from_vertex_name(left_vertex.name())
+            self.add_common_set_at_transition_constraint(left_set_id, edge)
 
         # -----------------------------------------------------------------
         # Adding costs
@@ -313,10 +290,60 @@ class GCSforBlocks:
             WARN("Convex set", name, "is not bounded!")
         return vertex
 
+    def connect_vertices(
+        self,
+        left_vertex_name: str,
+        right_vertex_name: str,
+        add_set_transition_constraint: bool = True,
+        add_grasp_cost: bool = True,
+    ):
+        """Connect vertices by name"""
+        left_vertex = self.name_to_vertex[left_vertex_name]
+        right_vertex = self.name_to_vertex[right_vertex_name]
+
+        self.add_edge(
+            left_vertex,
+            right_vertex,
+            add_set_transition_constraint=add_set_transition_constraint,
+            add_grasp_cost=add_grasp_cost,
+        )
+
+    def connect_to_vertex_on_the_right(
+        self,
+        left_vertex_name: str,
+        right_vertex_names: T.List[str],
+        add_set_transition_constraint=True,
+        add_grasp_cost: bool = True,
+    ):
+        """Left vertex gets connected to set of right vertices."""
+        for right_vertex_name in right_vertex_names:
+            self.connect_vertices(
+                left_vertex_name,
+                right_vertex_name,
+                add_set_transition_constraint=add_set_transition_constraint,
+                add_grasp_cost=add_grasp_cost,
+            )
+
+    def connect_to_vertex_on_the_left(
+        self,
+        left_vertex_names: T.List[str],
+        right_vertex_name: str,
+        add_set_transition_constraint=True,
+        add_grasp_cost: bool = True,
+    ):
+        """Set of left vertices get connected to right vertex."""
+        for left_vertex_name in left_vertex_names:
+            self.connect_vertices(
+                left_vertex_name,
+                right_vertex_name,
+                add_set_transition_constraint=add_set_transition_constraint,
+                add_grasp_cost=add_grasp_cost,
+            )
+
     ###################################################################################
     # Adding constraints and cost terms
     def add_orbital_constraint(
-        self, left_vertex_set_id: int, edge: GraphOfConvexSets.Edge
+        self, left_mode: int, edge: GraphOfConvexSets.Edge
     ) -> None:
         """
         READY
@@ -324,7 +351,6 @@ class GCSforBlocks:
         Orbital constraints are independent of edges
         """
         xu, xv = edge.xu(), edge.xv()
-        left_mode = self.get_mode_from_set_id(left_vertex_set_id)
         orbital_constraint = self.set_gen.get_orbital_constraint(left_mode)
         edge.AddConstraint(
             Binding[LinearEqualityConstraint](orbital_constraint, np.append(xv, xu))
@@ -678,12 +704,24 @@ class GCSforBlocks:
     def get_vertex_name(self, layer: int, set_id: int) -> str:
         return "M_" + str(layer) + "_" + str(set_id)
 
-    def get_mode_from_vertex_name(self, name: str) -> int:
+    def get_set_id_from_vertex_name(self, name: str) -> int:
+        assert name not in ("start", "target"), "Trying to get set id for bad sets!"
         set_id = int(name.split("_")[-1])
+        return set_id
+
+    def get_mode_from_vertex_name(self, name: str) -> int:
+        if name == "start":
+            return self.start_mode
+        if name == "target":
+            return self.target_mode
+        set_id = self.get_set_id_from_vertex_name(name)
         return self.get_mode_from_set_id(set_id)
 
     def get_edge_name(self, left_vertex_name: str, right_vertex_name: str) -> str:
         return "E: " + left_vertex_name + " -> " + right_vertex_name
+
+    def set_names_for_layer(self, set_ids, layer):
+        return [self.get_vertex_name(layer, set_id) for set_id in set_ids]
 
     ###################################################################################
     # Solve and display solution

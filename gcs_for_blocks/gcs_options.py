@@ -33,6 +33,10 @@ class GCSforBlocksOptions:
     max_rounded_paths: int = 50
     use_convex_relaxation: bool = True
 
+    # for each mode, consider creating an unconstrained in/out node.
+    # those this makes the problem significantly less tight, it reduces the number of edges.
+    in_and_out_through_a_single_node = False
+
     # whether source and target ought to be connected to just one set in the mode
     # TODO: this should really be a default behavior always;
     # it reduces the number of edges and cycles
@@ -68,6 +72,7 @@ class GCSforBlocksOptions:
         max_rounded_paths: int = 40,
         use_convex_relaxation: bool = True,
         connect_source_target_to_single_set: bool = True,
+        in_and_out_through_a_single_node: bool = False,
     ):
         assert problem_complexity in ("transparent-no-obstacles", "obstacles")
         self.block_dim = block_dim
@@ -81,5 +86,6 @@ class GCSforBlocksOptions:
         self.max_rounded_paths = max_rounded_paths
         self.use_convex_relaxation = use_convex_relaxation
         self.connect_source_target_to_single_set = connect_source_target_to_single_set
+        self.in_and_out_through_a_single_node = in_and_out_through_a_single_node
 
         self.num_gcs_sets = -1

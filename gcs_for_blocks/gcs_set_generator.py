@@ -163,10 +163,11 @@ class GCSsetGenerator:
     ) -> T.Tuple[npt.NDArray, npt.NDArray]:
         """
         When in mode 0, there are no obstacles.
-        When in mode m, block m cannot collide with other blocks. Other block is given as an obstacle:
-        |x_block - x_m| <= block_width
+        When in mode m, block m cannot collide with other blocks.
+        Other block is given as an obstacle:
+            |x_block - x_m| <= block_width
         Since x_m = x_0 in mode k, we have:
-        |x_block - x_0| <= block_width
+            |x_block - x_0| <= block_width
 
         Returns this obstacle in configuration space as an inequality Ax<=b
         """

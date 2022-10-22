@@ -33,6 +33,11 @@ class GCSforBlocksOptions:
     max_rounded_paths: int = 50
     use_convex_relaxation: bool = True
 
+    # whether source and target ought to be connected to just one set in the mode
+    # TODO: this should really be a default behavior always;
+    # it reduces the number of edges and cycles
+    connect_source_target_to_single_set: bool = True
+
     @property
     def num_modes(self) -> int:
         """
@@ -62,6 +67,7 @@ class GCSforBlocksOptions:
         problem_complexity: str = "obstacles",
         max_rounded_paths: int = 40,
         use_convex_relaxation: bool = True,
+        connect_source_target_to_single_set: bool = True,
     ):
         assert problem_complexity in ("transparent-no-obstacles", "obstacles")
         self.block_dim = block_dim
@@ -73,5 +79,7 @@ class GCSforBlocksOptions:
         self.time_cost_weight = time_cost_weight
         self.problem_complexity = problem_complexity
         self.max_rounded_paths = max_rounded_paths
+        self.use_convex_relaxation = use_convex_relaxation
+        self.connect_source_target_to_single_set = connect_source_target_to_single_set
 
         self.num_gcs_sets = -1

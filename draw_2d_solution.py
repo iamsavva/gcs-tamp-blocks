@@ -4,7 +4,11 @@ import typing as T
 import numpy as np
 import numpy.typing as npt
 
-from test import make_some_simple_transparent_tests, make_simple_obstacle_swap_two
+from test import (
+    make_some_simple_transparent_tests,
+    make_simple_obstacle_swap_two,
+    make_simple_transparent_gcs_test,
+)
 
 try:
     from tkinter import Tk, Canvas, Toplevel
@@ -35,7 +39,6 @@ class Draw2DSolution:
         fast: bool = True,
         just_two=False,
     ):
-        assert num_modes - 1 <= len(BLOCK_COLORS), "Not enough block colors"
         self.num_modes = num_modes
         self.ub = ub
         self.cell_scaling = CELL_WIDTH
@@ -146,7 +149,7 @@ class Draw2DSolution:
                 y - side,
                 x + side,
                 y + side,
-                fill=BLOCK_COLORS[block_num - 1],
+                fill=BLOCK_COLORS[(block_num - 1) % len(BLOCK_COLORS)],
                 outline="black",
                 width=2,
             ),
@@ -246,7 +249,9 @@ class Draw2DSolution:
 
 
 if __name__ == "__main__":
-    gcs, ub, goal = make_simple_obstacle_swap_two()
+    # gcs, ub, goal = make_simple_obstacle_swap_two()
+    gcs, ub, goal = make_simple_transparent_gcs_test(2, 7, 18)
+
     assert gcs.solution.is_success(), "Solution was not found"
     modes, vertices = gcs.get_solution_path()
     for i in range(len(vertices)):
@@ -254,7 +259,8 @@ if __name__ == "__main__":
 
     print(modes)
     print(vertices)
-    drawer = Draw2DSolution(3, ub, modes, vertices, goal, fast=True)  # type: ignore
+
+    drawer = Draw2DSolution(gcs.opt.num_modes, ub, modes, vertices, goal, fast=True)  # type: ignore
     drawer.draw_solution()
 
-    make_some_simple_transparent_tests()
+    # make_some_simple_transparent_tests()

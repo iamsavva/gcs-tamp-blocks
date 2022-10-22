@@ -111,7 +111,7 @@ class GCSforBlocks:
         self.add_start_node(start_state, start_mode)
 
         # add layers 1 through horizon-1
-        for layer in tqdm(range(1, self.opt.horizon), desc="Adding layers: "): # type: ignore
+        for layer in tqdm(range(1, self.opt.horizon), desc="Adding layers: "):  # type: ignore
             self.add_nodes_for_layer(layer)
 
         # add the target node
@@ -182,13 +182,14 @@ class GCSforBlocks:
             self.add_vertex(
                 self.get_convex_set_for_set_id(set_id), self.get_vertex_name(0, set_id)
             )
-
         # obtain sets that contain the start point; these are the sets that start is connected to
         sets_with_start = []
         for set_in_mode in sets_in_start_mode:
             convex_set = self.get_convex_set_for_set_id(set_in_mode)
             if convex_set.PointInSet(start_state.x()):
                 sets_with_start += [set_in_mode]
+                if self.opt.connect_source_target_to_single_set:
+                    break
         assert (
             len(sets_with_start) > 0
         ), "No set in start mode contains the start point!"
@@ -238,6 +239,8 @@ class GCSforBlocks:
             if convex_set.IntersectsWith(target_state):
                 # if convex_set.PointInSet(target_state.x()):
                 sets_with_target += [set_in_mode]
+                if self.opt.connect_source_target_to_single_set:
+                    break
         assert (
             len(sets_with_target) > 0
         ), "No set in target mode contains the target point!"
@@ -777,7 +780,7 @@ class GCSforBlocks:
         INFO("-----------------------")
         INFO("Solution is:")
         INFO("-----------------------")
-        for i in range(len(modes)):
+        for i in range(len(modes)):  # pylint: disable=consider-using-enumerate
             sg = vertices[i][0 : self.opt.block_dim]
             if modes[i] == "start":
                 INFO("Start at", sg)

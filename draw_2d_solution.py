@@ -1,15 +1,10 @@
+# pyright: reportMissingImports=false
 import typing as T
 
 import numpy as np
 import numpy.typing as npt
 
-# from gcs import GCSforBlocks
-from test import (
-    make_simple_transparent_gcs_test,
-    make_simple_swap_two,
-    make_simple_swap_three,
-    make_simple_set_based,
-)
+from test import make_some_simple_transparent_tests, make_simple_obstacle_swap_two
 
 try:
     from tkinter import Tk, Canvas, Toplevel
@@ -33,10 +28,11 @@ class Draw2DSolution:
     def __init__(
         self,
         num_modes: int,
-        ub: float,
-        mode_solution,
-        vertex_solution,
+        ub: npt.NDArray,
+        mode_solution: T.List[str],
+        vertex_solution: T.List[T.List],
         goal,
+        fast: bool = True,
         just_two=False,
     ):
         assert num_modes - 1 <= len(BLOCK_COLORS), "Not enough block colors"
@@ -51,10 +47,13 @@ class Draw2DSolution:
         self.mode = mode_solution
         self.vertex = vertex_solution
 
-        self.speed = 10  # units/s
-        self.grasp_dt = 0.3  # s
-        # self.speed = 2  # units/s
-        # self.grasp_dt = 0.7  # s
+        if fast:
+            self.speed = 10  # units/s
+            self.grasp_dt = 0.3  # s
+        else:
+            self.speed = 2  # units/s
+            self.grasp_dt = 0.7  # s
+
         self.move_dt = 0.025  # s
 
         self.grasping = False
@@ -63,6 +62,7 @@ class Draw2DSolution:
         self.goal = goal
         self.just_two = just_two
 
+        # tkinter initialization
         self.tk = Tk()
         self.tk.withdraw()
         top = Toplevel(self.tk)
@@ -70,7 +70,7 @@ class Draw2DSolution:
         top.protocol("WM_DELETE_WINDOW", top.destroy)
 
         self.canvas = Canvas(
-            top, width=self.width, height=self.width, background=BACKGROUND
+            top, width=self.width[0], height=self.width[1], background=BACKGROUND
         )
         self.canvas.pack()
         self.cells = {}
@@ -86,7 +86,7 @@ class Draw2DSolution:
         vertex = self.vertex
         mode = self.mode
 
-        state_now = vertex[0, :]
+        state_now = vertex[0, :]  # type: ignore
         mode_now = mode[1]
         if mode_now == "0":
             self.grasping = False
@@ -95,7 +95,7 @@ class Draw2DSolution:
         time.sleep(5.0)
 
         for i in range(1, len(vertex)):
-            state_next = vertex[i, :]
+            state_next = vertex[i, :]  # type: ignore
             mode_next = mode[i]
 
             self.move_from_to(state_now, state_next)
@@ -201,7 +201,7 @@ class Draw2DSolution:
                     0,
                     0,
                     self.border,
-                    self.width,
+                    self.width[1],
                     fill="black",
                     outline="black",
                     width=0,
@@ -209,7 +209,7 @@ class Draw2DSolution:
                 self.canvas.create_rectangle(
                     0,
                     0,
-                    self.width,
+                    self.width[0],
                     self.border,
                     fill="black",
                     outline="black",
@@ -217,18 +217,18 @@ class Draw2DSolution:
                 ),
                 self.canvas.create_rectangle(
                     0,
-                    self.width - self.border,
-                    self.width,
-                    self.width,
+                    self.width[1] - self.border,
+                    self.width[0],
+                    self.width[1],
                     fill="black",
                     outline="black",
                     width=0,
                 ),
                 self.canvas.create_rectangle(
-                    self.width - self.border,
+                    self.width[0] - self.border,
                     0,
-                    self.width,
-                    self.width,
+                    self.width[0],
+                    self.width[1],
                     fill="black",
                     outline="black",
                     width=0,
@@ -245,35 +245,16 @@ class Draw2DSolution:
                 self.draw_shadow(self.goal[2 * i : 2 * i + 2], i)
 
 
-block_dim = 3
+if __name__ == "__main__":
+    gcs, ub, goal = make_simple_obstacle_swap_two()
+    assert gcs.solution.is_success(), "Solution was not found"
+    modes, vertices = gcs.get_solution_path()
+    for i in range(len(vertices)):
+        vertices[i] = ["%.1f" % v for v in vertices[i]]
 
-num_blocks = 10
-# num_blocks = 3
-horizon = 25
-use_convex_relaxation = True
+    print(modes)
+    print(vertices)
+    drawer = Draw2DSolution(3, ub, modes, vertices, goal, fast=True)  # type: ignore
+    drawer.draw_solution()
 
-# gcs, ub, goal = make_simple_swap_two(horizon, max_rounded_paths=200, use_convex_relaxation=use_convex_relaxation)
-# gcs, ub, goal = make_simple_swap_three(horizon, max_rounded_paths=200, use_convex_relaxation=use_convex_relaxation)
-# gcs, ub, goal = make_simple_transparent_gcs_test(block_dim, num_blocks, horizon, max_rounded_paths=200, use_convex_relaxation=use_convex_relaxation)
-
-
-# gcs, ub, goal = make_simple_transparent_gcs_test(block_dim, num_blocks, horizon, max_rounded_paths=300, use_convex_relaxation=use_convex_relaxation)
-
-gcs, ub, goal = make_simple_set_based(
-    horizon=7, use_convex_relaxation=True, max_rounded_paths=100, display_graph=False
-)
-
-# horizon: int,
-#     use_convex_relaxation=True,
-#     max_rounded_paths: int = 30,
-#     display_graph: bool = False,
-
-assert gcs.solution.is_success(), "Solution was not found"
-modes, vertices = gcs.get_solution_path()
-for i in range(len(vertices)):
-    vertices[i] = ["%.1f" % v for v in vertices[i]]
-
-print(modes)
-print(vertices)
-drawer = Draw2DSolution(num_blocks + 1, ub, modes, vertices, goal, just_two=True)
-drawer.draw_solution()
+    make_some_simple_transparent_tests()

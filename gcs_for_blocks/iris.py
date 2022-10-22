@@ -1,11 +1,15 @@
+# pyright: reportMissingImports=false
 import typing as T
 
 import time
 
-from pydrake.geometry.optimization import HPolyhedron, Iris
-from pydrake.common import RandomGenerator
+from pydrake.geometry.optimization import (  # pylint: disable=import-error
+    HPolyhedron,
+    Iris,
+)
+from pydrake.common import RandomGenerator  # pylint: disable=import-error
 
-from util import WARN, INFO
+from .util import WARN, INFO
 
 
 def sampling_based_IRIS_tesselation(

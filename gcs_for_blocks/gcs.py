@@ -1,7 +1,7 @@
+# pyright: reportMissingImports=false
 import typing as T
 
 import numpy as np
-import scipy
 import numpy.typing as npt
 
 import pydot
@@ -9,104 +9,81 @@ from tqdm import tqdm
 from IPython.display import Image, display
 import time
 
-import pydrake.geometry.optimization as opt
-from pydrake.geometry.optimization import Point, GraphOfConvexSets, HPolyhedron
-from pydrake.solvers import (
+import pydrake.geometry.optimization as opt  # pylint: disable=import-error
+from pydrake.geometry.optimization import (  # pylint: disable=import-error
+    Point,
+    GraphOfConvexSets,
+    HPolyhedron,
+)
+from pydrake.solvers import (  # pylint: disable=import-error, unused-import
     Binding,
-    Cost,
     L2NormCost,
     LinearConstraint,
     LinearEqualityConstraint,
     LinearCost,
 )
 
-from util import ERROR, WARN, INFO, YAY
-from iris import sampling_based_IRIS_tesselation
+from .util import ERROR, WARN, INFO, YAY
+from .gcs_options import GCSforBlocksOptions
+from .gcs_set_generator import GCSsetGenerator
 
 
 class GCSforBlocks:
-    block_dim: int  # number of dimensions that describe the block world
-    num_blocks: int  # number of blocks
-    block_width: float = 1.0  # block width
-
-    mode_connectivity: str = "sparse"
-    # full -- allow transitioning into itself
-    # sparse -- don't allow transitioning into itself
-
-    # add a time cost on each edge? this is done to "regularize" the trajectory
-    # goal is to reduce possibility of pointlessly grasping and ungrasping in place
-    add_time_cost: bool = True
-    time_cost_weight: float = 1.0  # relative weight between
-
-    # problem_complexity = "transparent-no-obstacles"
-    problem_complexity = "obstacles"
-
-    no_cycles = False
+    """
+    GCS for N-dimensional block moving using a top-down suction cup.
+    """
 
     ###################################################################################
     # Properties, inits, setter functions
 
-    @property
-    def num_modes(self) -> int:
-        """
-        Number of modes. For the case with no pushing, we have 1 mode for free motion and a mode per block for when grasping that block.
-        The case with pushing will have many more modes.
-        """
-        return self.num_blocks + 1
-
-    # @property
-    # def num_gcs_sets(self) -> int:
-    #     """
-    #     Returns number of GCS sets; right now it's just the number of modes, but in general each mode will have multiple convex sets as part of it.
-    #     """
-    #     return self.num_modes * 1
-
-    @property
-    def state_dim(self) -> int:
-        """
-        Dimension of the state x optimized at each vertex.
-        (number of blocks + gripper) x (dimension of the world)
-        """
-        return (self.num_blocks + 1) * self.block_dim
-
-    @property
-    def delta(self) -> float:
-        """Half block width"""
-        return self.block_width / 2.0
-
     def set_block_width(self, block_width: float) -> None:
-        self.block_width = block_width
+        """Setter method for block width."""
+        self.opt.block_width = block_width
+        self.set_gen.opt.block_width = block_width
 
-    def set_ub(self, ub: float) -> None:
-        self.ub = ub * np.ones(self.state_dim)
+    def set_ub(self, ub: npt.NDArray[np.float64]) -> None:
+        """Setter method for upper bound on the workspace. Lower bound always assumed 0."""
+        assert ub.size == self.opt.block_dim, "Upper bound is of wrong size"
 
-    def __init__(self, block_dim: int = 1, num_blocks: int = 2, horizon: int = 5):
-        self.block_dim = block_dim
-        self.num_blocks = num_blocks
-        self.horizon = horizon
+        self.ub = np.tile(ub, self.opt.num_modes)
+        self.set_gen.ub = np.tile(ub, self.opt.num_modes)
 
-        # lower and upper bounds on the workspace
-        self.lb = np.zeros(self.state_dim)
-        self.ub = 10.0 * np.ones(self.state_dim)
+    def __init__(self, options: GCSforBlocksOptions):
+        # options
+        self.opt = options
 
+        # init the graph
         self.gcs = GraphOfConvexSets()
         self.graph_built = False
+
+        # lower and upper bounds on the workspace
+        self.lb = np.zeros(self.opt.state_dim)  # pylint: disable=invalid-name
+        self.ub = 10.0 * np.ones(self.opt.state_dim)  # pylint: disable=invalid-name
+
+        self.set_gen = GCSsetGenerator(options, self.lb, self.ub)
+
+        # the following structures hold information about the graph connectivity.
 
         # name to vertex dictionary, populated as we populate the graph with vertices
         self.name_to_vertex = dict()  # T.Dict[str, GraphOfConvexSets.Vertex]
 
-        # structures that hold information about the graph connectivity.
-        # used for hand-built graph sparcity
-        # see populate_important_things(self)
+        # below structures are used for hand-built graph edge information.
+        # see populate_important_things()
+        # set ids located in a mode
         self.sets_per_mode = dict()  # T.Dict[int, T.Set[int]]
+        # modes that are represented in a layer (horizon step)
         self.modes_per_layer = dict()  # T.Dict[int, T.Set[int]]
+        # set_ids that are represented ina  layer (horizon step)
         self.sets_per_layer = dict()  # T.Dict[int, T.Set[int]]
+        # edges matrix for a mode graph
         self.mode_graph_edges = np.empty([])  # np.NDArray, size num_modes x num_modes
+        # edge matrix for a set graph
         self.set_graph_edges = np.array(
             []
         )  # np.NDArray, size num_gcs_sets x num_gcs_sets
+        # get polyhedron that describes a set
         self.set_id_to_polyhedron = dict()  # T.Dict[int, HPolyhedron]
-        self.num_gcs_sets = -1
+        self.opt.num_gcs_sets = -1  # int, numer of GCS sets.
 
     ###################################################################################
     # Building the finite horizon GCS
@@ -119,8 +96,9 @@ class GCSforBlocks:
         target_mode: int,
     ) -> None:
         """
-        READY
         Build the GCS graph of horizon H from start to target nodes.
+        TODO:
+        - allow target state to be a set
         """
         # reset the graph
         self.gcs = GraphOfConvexSets()
@@ -133,7 +111,7 @@ class GCSforBlocks:
         self.add_start_node(start_state, start_mode)
 
         # add layers 1 through horizon-1
-        for layer in tqdm(range(1, self.horizon), desc="Adding layers: "):
+        for layer in tqdm(range(1, self.opt.horizon), desc="Adding layers: "): # type: ignore
             self.add_nodes_for_layer(layer)
 
         # add the target node
@@ -150,7 +128,7 @@ class GCSforBlocks:
         The GCS graph is a trellis diagram (finite horizon GCS); each layer contains an entire GCS graph of modes.
         Here we add the nodes, edges, constraints, and costs on the new layer.
         """
-        assert 1 <= layer < self.horizon, "Invalid layer number"
+        assert 1 <= layer < self.opt.horizon, "Invalid layer number"
         # for each mode in next layer
         for mode in self.modes_per_layer[layer]:
             # for each set in that mode, add new vertex
@@ -159,50 +137,33 @@ class GCSforBlocks:
                     self.get_convex_set_for_set_id(set_id),
                     self.get_vertex_name(layer, set_id),
                 )
-                if not self.no_cycles:
-                    # connect it with vertices from previouis layer
-                    edges_in = self.get_edges_into_set_out_of_mode(set_id)
-                    for left_vertex_set_id in edges_in:
-                        # add an edge from previous layer
-                        left_vertex_name = self.get_vertex_name(
-                            layer - 1, left_vertex_set_id
-                        )
-                        left_vertex = self.name_to_vertex[left_vertex_name]
-                        self.add_edge(left_vertex, new_vertex, left_vertex_set_id)
-                else:
-                    # connect it with vertices from previouis layer
-                    edges_in = self.get_edges_into_set(set_id)
-                    for left_vertex_set_id in edges_in:
-                        # add an edge from previous layer
-                        left_vertex_name = self.get_vertex_name(
-                            layer - 1, left_vertex_set_id
-                        )
-                        try:
-                            left_vertex = self.name_to_vertex[left_vertex_name]
-                            self.add_edge(left_vertex, new_vertex, left_vertex_set_id)
-                        except:
-                            pass
-
-            if not self.no_cycles:
-                # connect the vertices within the mode
-                for left_vertex_set_id in self.sets_per_mode[mode]:
-                    connections_within_mode = self.get_edges_within_same_mode(
-                        left_vertex_set_id
+                # connect it with vertices from previouis layer
+                edges_in = self.get_edges_into_set_out_of_mode(set_id)
+                for left_vertex_set_id in edges_in:
+                    # add an edge from previous layer
+                    left_vertex_name = self.get_vertex_name(
+                        layer - 1, left_vertex_set_id
                     )
-                    left_vertex_name = self.get_vertex_name(layer, left_vertex_set_id)
                     left_vertex = self.name_to_vertex[left_vertex_name]
-                    # connect left vertex with other vertices within this mode
-                    for right_vertex_set_id in connections_within_mode:
-                        right_vertex_name = self.get_vertex_name(
-                            layer, right_vertex_set_id
-                        )
-                        right_vertex = self.name_to_vertex[right_vertex_name]
-                        self.add_edge(
-                            left_vertex,
-                            right_vertex,
-                            left_vertex_set_id,
-                            add_grasp_cost=False,
-                        )
+                    self.add_edge(left_vertex, new_vertex, left_vertex_set_id)
+
+            # connect the vertices within the mode
+            for left_vertex_set_id in self.sets_per_mode[mode]:
+                connections_within_mode = self.get_edges_within_same_mode(
+                    left_vertex_set_id
+                )
+                left_vertex_name = self.get_vertex_name(layer, left_vertex_set_id)
+                left_vertex = self.name_to_vertex[left_vertex_name]
+                # connect left vertex with other vertices within this mode
+                for right_vertex_set_id in connections_within_mode:
+                    right_vertex_name = self.get_vertex_name(layer, right_vertex_set_id)
+                    right_vertex = self.name_to_vertex[right_vertex_name]
+                    self.add_edge(
+                        left_vertex,
+                        right_vertex,
+                        left_vertex_set_id,
+                        add_grasp_cost=False,
+                    )
 
     def add_start_node(self, start_state: Point, start_mode: int) -> None:
         """
@@ -243,23 +204,22 @@ class GCSforBlocks:
                 add_set_transition_constraint=False,
                 add_grasp_cost=False,
             )
-        if not self.no_cycles:
-            # add edges within the start-mode at horizon 0
-            for left_vertex_set_id in sets_in_start_mode:
-                connections_within_mode = self.get_edges_within_same_mode(
-                    left_vertex_set_id
+        # add edges within the start-mode at horizon 0
+        for left_vertex_set_id in sets_in_start_mode:
+            connections_within_mode = self.get_edges_within_same_mode(
+                left_vertex_set_id
+            )
+            left_vertex_name = self.get_vertex_name(0, left_vertex_set_id)
+            left_vertex = self.name_to_vertex[left_vertex_name]
+            for right_vertex_set_id in connections_within_mode:
+                right_vertex_name = self.get_vertex_name(0, right_vertex_set_id)
+                right_vertex = self.name_to_vertex[right_vertex_name]
+                self.add_edge(
+                    left_vertex,
+                    right_vertex,
+                    left_vertex_set_id,
+                    add_grasp_cost=False,
                 )
-                left_vertex_name = self.get_vertex_name(0, left_vertex_set_id)
-                left_vertex = self.name_to_vertex[left_vertex_name]
-                for right_vertex_set_id in connections_within_mode:
-                    right_vertex_name = self.get_vertex_name(0, right_vertex_set_id)
-                    right_vertex = self.name_to_vertex[right_vertex_name]
-                    self.add_edge(
-                        left_vertex,
-                        right_vertex,
-                        left_vertex_set_id,
-                        add_grasp_cost=False,
-                    )
 
     def add_target_node(self, target_state: Point, target_mode: int) -> None:
         """
@@ -284,7 +244,7 @@ class GCSforBlocks:
 
         # at each horizon level, only sets that contain the target can transition into target
         # at each layer
-        for layer in range(self.horizon):
+        for layer in range(self.opt.horizon):
             # if that layer has a target mode
             if target_mode in self.modes_per_layer[layer]:
                 # for each set that contains the target
@@ -331,7 +291,7 @@ class GCSforBlocks:
         # add movement cost on the edge
         self.add_gripper_movement_cost_on_edge(edge)
         # add time cost on edge
-        if add_grasp_cost and self.add_time_cost:
+        if add_grasp_cost and self.opt.add_time_cost:
             self.add_time_cost_on_edge(edge)
 
     def add_vertex(
@@ -362,7 +322,7 @@ class GCSforBlocks:
         """
         xu, xv = edge.xu(), edge.xv()
         left_mode = self.get_mode_from_set_id(left_vertex_set_id)
-        orbital_constraint = self.get_orbital_constraint(left_mode)
+        orbital_constraint = self.set_gen.get_orbital_constraint(left_mode)
         edge.AddConstraint(
             Binding[LinearEqualityConstraint](orbital_constraint, np.append(xv, xu))
         )
@@ -390,8 +350,8 @@ class GCSforBlocks:
         """
         xu, xv = edge.xu(), edge.xv()
         #  gripper state is 0 to block_dim
-        d = self.block_dim
-        n = self.state_dim
+        d = self.opt.block_dim
+        n = self.opt.state_dim
         A = np.zeros((d, 2 * n))
         A[:, 0:d] = np.eye(d)
         A[:, n : n + d] = -np.eye(d)
@@ -405,347 +365,62 @@ class GCSforBlocks:
         READY
         Walking along the edges costs some cosntant term. This is done to avoid grasping and ungrasping in place.
         """
-        A = np.zeros(self.state_dim)
-        b = self.time_cost_weight * np.ones(1)
+        A = np.zeros(self.opt.state_dim)
+        b = self.opt.time_cost_weight * np.ones(1)
         cost = LinearCost(A, b)
         edge.AddCost(Binding[LinearCost](cost, edge.xv()))
-
-    ###################################################################################
-    # Orbital sets and constraints
-
-    def get_orbit_set_for_mode_equality(self, mode: int):
-        """
-        When in mode k, the orbit is such that x_m-y_m = 0 for m not k nor 0.
-        Produces convex set in a form A [x, y]^T = b
-        """
-        A = None
-        b = None
-        d = self.block_dim
-        n = self.state_dim
-        # for each mode
-        for m in range(self.num_modes):
-            # that is not 0 or mode
-            if m not in (0, mode):
-                # add constraint
-                A_m = np.zeros((d, 2 * n))
-                A_m[:, d * m : d * (m + 1)] = np.eye(d)
-                A_m[:, n + d * m : n + d * (m + 1)] = -np.eye(d)
-                b_m = np.zeros(d)
-                if A is None:
-                    A = A_m
-                    b = b_m
-                else:
-                    A = np.vstack((A, A_m))
-                    b = np.hstack((b, b_m))
-        return A, b
-
-    def get_orbit_set_for_mode_inequality(self, mode: int):
-        """
-        When in mode k, the orbit is such that x_m-y_m = 0 for m not k nor 0.
-        Produces convex set in a form A [x, y]^T <= b
-        """
-        A, b = self.get_orbit_set_for_mode_equality(mode)
-        return self.get_inequality_form_from_equality_form(A, b)
-
-    def get_orbital_constraint(self, mode: int):
-        A, b = self.get_orbit_set_for_mode_equality(mode)
-        return LinearEqualityConstraint(A, b)
-
-    ###################################################################################
-    # Trivial representation transformations
-
-    def get_inequality_form_from_equality_form(
-        self, A: npt.NDArray, b: npt.NDArray
-    ) -> T.Tuple[npt.NDArray, npt.NDArray]:
-        """
-        Given a set in a form Ax = b return this same set in a form Ax <= b
-        """
-        new_A = np.vstack((A, -A))
-        new_b = np.hstack((b, -b))
-        return new_A, new_b
-
-    ###################################################################################
-    # Sets for modes, done clean
-
-    def get_bounding_box_on_x_two_inequalities(
-        self,
-    ) -> T.Tuple[npt.NDArray, npt.NDArray, npt.NDArray]:
-        """
-        Bounding box on x is lb <= x <= ub.
-        Returns this inequality in a form lb <= Ax <= ub.
-        """
-        A = np.eye(self.state_dim)
-        lb = self.lb
-        ub = self.ub
-        return A, lb, ub
-
-    def get_bounding_box_on_x_single_inequality(
-        self,
-    ) -> T.Tuple[npt.NDArray, npt.NDArray]:
-        """
-        Bounding box on x is lb <= x <= ub.
-        Returns this inequality in a form Ax <= b
-        """
-        A, lb, ub = self.get_bounding_box_on_x_two_inequalities()
-        AA = np.vstack((A, -A))
-        b = np.hstack((ub, -lb))
-        return AA, b
-
-    def get_plane_for_grasping_modes_equality(
-        self, mode: int
-    ) -> T.Tuple[npt.NDArray, npt.NDArray]:
-        """
-        When gasping block m, x_0 = x_m. The plane of possible states when in mode k is given by
-        x_0 - x_k = 0.
-        Returns this plane in the form Ax = b.
-        """
-        d = self.block_dim
-        n = self.state_dim
-        A = np.zeros((d, n))
-        A[0:d, 0:d] = np.eye(d)
-        A[0:d, mode * d : (mode + 1) * d] = -np.eye(d)
-        b = np.zeros(d)
-        return A, b
-
-    def get_plane_for_grasping_modes_inequality(
-        self, mode: int
-    ) -> T.Tuple[npt.NDArray, npt.NDArray]:
-        """
-        When gasping block m, x_0 = x_m. The plane of possible states when in mode k is given by
-        x_0 - x_k = 0.
-        Returns this plane in the form Ax <= b.
-        """
-        A, b = self.get_plane_for_grasping_modes_equality(mode)
-        return self.get_inequality_form_from_equality_form(A, b)
-
-    def get_convex_set_for_mode_inequality(
-        self, mode: int
-    ) -> T.Tuple[npt.NDArray, npt.NDArray]:
-        """
-        Convex set for mode 0 is just the bounding box.
-        Convex set for mode k is the bounding box and a plane.
-        Returns a convex set for mode in form Ax <= b.
-        """
-        if mode == 0:
-            return self.get_bounding_box_on_x_single_inequality()
-        else:
-            A_bounding, b_bounding = self.get_bounding_box_on_x_single_inequality()
-            A_plane, b_plane = self.get_plane_for_grasping_modes_inequality(mode)
-            A = np.vstack((A_bounding, A_plane))
-            b = np.hstack((b_bounding, b_plane))
-            return A, b
-
-    def get_convex_set_for_mode_polyhedron(self, mode: int) -> HPolyhedron:
-        """See get_convex_set_for_mode_inequality"""
-        A, b = self.get_convex_set_for_mode_inequality(mode)
-        return HPolyhedron(A, b)
-
-    ###################################################################################
-    # Obstacles
-    def obstacle_in_configuration_space_inequality(
-        self, block: int
-    ) -> T.Tuple[npt.NDArray, npt.NDArray]:
-        """
-        When in mode 0, there are no obstacles.
-        When in mode m, block m cannot collide with other blocks. Other block is given as an obstacle:
-        |x_block - x_m| <= block_width
-        Since x_m = x_0 in mode k, we have:
-        |x_block - x_0| <= block_width
-
-        Returns this obstacle in configuration space as an inequality Ax<=b
-        """
-        # TODO: should I also add constraint on mode? so both on 0 and on mode?
-        # TODO: should I add a boundary?
-        d = self.block_dim
-        n = self.state_dim
-        A = np.zeros((d, n))
-        A[:, 0:d] = np.eye(d)
-        A[:, block * d : (block + 1) * d] = -np.eye(d)
-        b = np.ones(d) * self.block_width
-        A = np.vstack((A, -A))
-        b = np.hstack((b, b))
-        return A, b
-
-    def obstacle_in_configuration_space_polyhedron(self, block: int) -> HPolyhedron:
-        """See obstacle_in_configuration_space_inequality"""
-        A, b = self.obstacle_in_configuration_space_inequality(block)
-        return HPolyhedron(A, b)
-
-    ###################################################################################
-    # Mode space transformation
-
-    def transformation_between_configuration_and_mode_space(
-        self, mode: int
-    ) -> T.Tuple[npt.NDArray, npt.NDArray]:
-        """
-        Contact-with-block modes are planes in R^n: Ax=b.
-        Instead of operating in a n-dimensional space, we can operate on an affine space that is a nullspace of A:
-        for x_0 s.t. Ax_0 = b and N = matrix of vectors of the nullspace of A, we have:
-        any x, s.t. Ax=b is given by x = x_0 + Ny, where y is of dimension of the nullspace of A.
-        This function returns some pair x_0 and N.
-        """
-        A, b = self.get_plane_for_grasping_modes_equality(mode)
-        x_0, residuals = np.linalg.lstsq(A, b, rcond=None)[0:2]
-        # print(x_0, residuals)
-        # assert np.allclose(residuals, np.zeros(self.state_dim)), "Residuals non zero when solving Ax=b"
-        N = scipy.linalg.null_space(A)
-        return x_0, N
-
-    def transformation_between_mode_and_configuration_space(
-        self, mode: int
-    ) -> T.Tuple[npt.NDArray, npt.NDArray]:
-        """
-        We can move from mode space into the configuration space using pseudo inverse
-        """
-        x_0, N = self.transformation_between_configuration_and_mode_space(mode)
-        mpi = np.linalg.pinv(N)
-        return x_0, mpi
-
-    def configuration_space_inequality_in_mode_space_inequality(
-        self, mode: int, A: npt.NDArray, b: npt.NDArray
-    ) -> T.Tuple[npt.NDArray, npt.NDArray]:
-        """
-        Suppose a polyhedron in configuration space is given by Ax <= b
-        The mode space for mode is x = x_0 + Ny
-        Plugging in, we have obstacle in mode space:
-        Ax_0 + ANy <= b
-        ANy <= b-Ax_0
-        returns AN, b-Ax_0, which define the obstacle in mode space
-        """
-        # get transformation into mode space
-        x_0, N = self.transformation_between_configuration_and_mode_space(mode)
-        return A.dot(N), (b - A.dot(x_0))
-
-    def configuration_space_obstacle_in_mode_space(
-        self, mode: int, block: int
-    ) -> HPolyhedron:
-        """
-        See inequality_polyhedron_in_mode_space_inequality.
-        """
-        # get obstacle
-        A, b = self.obstacle_in_configuration_space_inequality(block)
-        A_m, b_m = self.configuration_space_inequality_in_mode_space_inequality(
-            mode, A, b
-        )
-        return HPolyhedron(A_m, b_m)
-
-    def mode_space_polyhedron_in_configuration_space(
-        self, mode: int, poly: HPolyhedron
-    ) -> HPolyhedron:
-        """
-        we can transform polyhedrons in configuration space into polyhedrons in mode space
-        """
-        A, b = poly.A(), poly.b()
-        x_0, mpi = self.transformation_between_mode_and_configuration_space(mode)
-        A_c = A.dot(mpi)
-        b_c = b + A.dot(mpi.dot(x_0))
-        return HPolyhedron(A_c, b_c)
-
-    ###################################################################################
-    # Running IRIS
-
-    def get_convex_tesselation_for_mode(self, mode: int) -> T.List[HPolyhedron]:
-        """
-        NEEDS TESTING
-        """
-
-        def combine_sets(
-            A_1: npt.NDArray, A_2: npt.NDArray, b_1: npt.NDArray, b_2: npt.NDArray
-        ):
-            A, b = np.vstack((A_1, A_2)), np.hstack((b_1, b_2))
-            return HPolyhedron(A, b)
-
-        # get mode space obstacles
-        obstacle_blocks = [i for i in range(1, self.num_modes) if i != mode]
-        mode_space_obstacles = [
-            self.configuration_space_obstacle_in_mode_space(mode, block)
-            for block in obstacle_blocks
-        ]
-        # get mode space domain
-        (
-            conf_space_dom_A,
-            conf_space_dom_b,
-        ) = self.get_bounding_box_on_x_single_inequality()
-        # YAY(conf_space_dom_A, conf_space_dom_b)
-        (
-            mode_space_dom_A,
-            mode_space_dom_b,
-        ) = self.configuration_space_inequality_in_mode_space_inequality(
-            mode, conf_space_dom_A, conf_space_dom_b
-        )
-
-        mode_space_domain = HPolyhedron(mode_space_dom_A, mode_space_dom_b)
-        mode_space_domain = mode_space_domain.ReduceInequalities()
-
-        # get IRIS tesselation
-        mode_space_tesselation = sampling_based_IRIS_tesselation(
-            mode_space_obstacles, mode_space_domain
-        )
-        # move IRIS tesselation into configuration space
-        configuration_space_tesselation = [
-            self.mode_space_polyhedron_in_configuration_space(mode, poly)
-            for poly in mode_space_tesselation
-        ]
-        # add in-mode constraint to each polyhedron (TODO: this should be redundant?)
-        A_mode, b_mode = self.get_convex_set_for_mode_inequality(mode)
-        convex_sets_for_mode = [
-            combine_sets(A_mode, c.A(), b_mode, c.b())
-            for c in configuration_space_tesselation
-        ]
-        INFO("Iris finished mode", mode)
-        return convex_sets_for_mode
 
     ###################################################################################
     # build sets that are inside the modes
 
     def build_sets_per_mode(self) -> None:
         """
-        READY
-        Here I should be running IRIS to determine the sets for each mode.
+        Determine which sets belong to which mode
         """
-        assert self.problem_complexity in (
-            "transparent-no-obstacles",
-            "obstacles",
-        ), "Problem complexity option not implemented"
-        if self.problem_complexity == "transparent-no-obstacles":
-            for mode in range(self.num_modes):
+        if self.opt.problem_complexity == "transparent-no-obstacles":
+            # each mode set is just the mode itself
+            for mode in range(self.opt.num_modes):
                 self.sets_per_mode[mode] = {mode}
-            self.num_gcs_sets = self.num_modes
+            # number of gcs sets is the number of modes
+            self.opt.num_gcs_sets = self.opt.num_modes
 
-        elif self.problem_complexity == "obstacles":
+        elif self.opt.problem_complexity == "obstacles":
             # mode 0 is collision free and hence has just a single set in it
+            # TODO: this is not the case if i have obstacles
             self.sets_per_mode[0] = {0}
-            self.set_id_to_polyhedron[0] = self.get_convex_set_for_mode_polyhedron(0)
+            self.set_id_to_polyhedron[
+                0
+            ] = self.set_gen.get_convex_set_for_mode_polyhedron(0)
             set_indexer = 1
             # for each mode
-            for mode in range(1, self.num_modes):
+            for mode in range(1, self.opt.num_modes):
                 # get convex sets that belong to this mode
-                sets_in_mode = self.get_convex_tesselation_for_mode(mode)
+                sets_in_mode = self.set_gen.get_convex_tesselation_for_mode(mode)
                 self.sets_per_mode[mode] = set()
-                print("mode ", mode, "has convex sets:", len(sets_in_mode))
+                INFO("mode ", mode, "has convex sets:", len(sets_in_mode))
+                # for each IRIS set: redice inequalities, add the set to the dictionaries
                 for some_set in sets_in_mode:
                     some_set = some_set.ReduceInequalities()
                     self.sets_per_mode[mode].add(set_indexer)
                     self.set_id_to_polyhedron[set_indexer] = some_set
                     set_indexer += 1
-            self.num_gcs_sets = set_indexer
+            self.opt.num_gcs_sets = set_indexer
 
     def get_mode_from_set_id(self, set_id: int) -> int:
         """
         READY
         Returns a mode to which the vertex belongs.
-        In the simple case of transparent blocks, each vertex represents the full mode, so it's just the vertex itself.
+        In the simple case of transparent blocks, it's just the vertex (the mode) itself.
         """
-        assert 0 <= set_id < self.num_gcs_sets, "Set number out of bounds"
-        assert self.problem_complexity in (
-            "transparent-no-obstacles",
-            "obstacles",
-        ), "Problem complexity option not implemented"
-        if self.problem_complexity == "transparent-no-obstacles":
+        assert 0 <= set_id < self.opt.num_gcs_sets, "Set number out of bounds"
+        if self.opt.problem_complexity == "transparent-no-obstacles":
+            # eahc mode is the set itself
             mode = set_id
             return mode
-        elif self.problem_complexity == "obstacles":
-            for mode in range(self.num_modes):
+
+        elif self.opt.problem_complexity == "obstacles":
+            # must find a mode that has the set
+            for mode in range(self.opt.num_modes):
                 if set_id in self.sets_per_mode[mode]:
                     return mode
             assert False, "Set_id not in any mode??"
@@ -755,16 +430,16 @@ class GCSforBlocks:
         """
         READY
         Returns convex set that corresponds to the given vertex.
-        For the simple case of transparent blocks, this is equivivalent to the convex set that corresponds to the mode.
+        For the simple case of transparent blocks, it's the convex set that corresponds to the mode.
         """
-        assert self.problem_complexity in (
+        assert self.opt.problem_complexity in (
             "transparent-no-obstacles",
             "obstacles",
         ), "Problem complexity option not implemented"
-        if self.problem_complexity == "transparent-no-obstacles":
+        if self.opt.problem_complexity == "transparent-no-obstacles":
             mode = set_id
-            return self.get_convex_set_for_mode_polyhedron(mode)
-        elif self.problem_complexity == "obstacles":
+            return self.set_gen.get_convex_set_for_mode_polyhedron(mode)
+        elif self.opt.problem_complexity == "obstacles":
             return self.set_id_to_polyhedron[set_id]
         raise NotImplementedError
 
@@ -792,17 +467,19 @@ class GCSforBlocks:
         READY
         Mode connectivity.
         """
-        self.mode_graph_edges = np.zeros((self.num_modes, self.num_modes))
-        if self.no_cycles:
-            # mode 0 is connected to any other mode except itself
-            self.mode_graph_edges[0, :] = np.ones(self.num_modes)
-            # mode k is connected only to 0;
-            self.mode_graph_edges[:, 0] = np.ones(self.num_modes)
+        self.mode_graph_edges = np.zeros((self.opt.num_modes, self.opt.num_modes))
+        if self.opt.allow_self_transitions_for_modes:
+            # mode 0 is connected to any other mode and itself
+            self.mode_graph_edges[0, :] = np.ones(self.opt.num_modes)
+            # mode k is connected only to 0 and itself
+            self.mode_graph_edges[:, 0] = np.ones(self.opt.num_modes)
+            for i in range(1, self.opt.num_modes):
+                self.mode_graph_edges[i, i] = 1
         else:
             # mode 0 is connected to any other mode except itself
-            self.mode_graph_edges[0, 1:] = np.ones(self.num_modes - 1)
+            self.mode_graph_edges[0, 1:] = np.ones(self.opt.num_modes - 1)
             # mode k is connected only to 0;
-            self.mode_graph_edges[1:, 0] = np.ones(self.num_modes - 1)
+            self.mode_graph_edges[1:, 0] = np.ones(self.opt.num_modes - 1)
 
     def populate_edges_between_sets(self) -> None:
         """
@@ -812,41 +489,32 @@ class GCSforBlocks:
         When IRIS is used, sets must be A -- clustered (TODO: do they?),
         B -- connectivity checked and defined automatically.
         """
-        assert self.problem_complexity in (
-            "transparent-no-obstacles",
-            "obstacles",
-        ), "Problem complexity option not implemented"
-
-        if self.problem_complexity == "transparent-no-obstacles":
-            assert self.mode_connectivity in (
-                "sparse"
-            ), "For transparent blocks must have sparse connectivity"
-            self.set_graph_edges = np.zeros((self.num_gcs_sets, self.num_gcs_sets))
+        self.set_graph_edges = np.zeros((self.opt.num_gcs_sets, self.opt.num_gcs_sets))
+        if self.opt.problem_complexity == "transparent-no-obstacles":
             # mode 0 is connected to any other mode except itself
-            self.set_graph_edges[0, 1:] = np.ones(self.num_gcs_sets - 1)
+            self.set_graph_edges[0, 1:] = np.ones(self.opt.num_gcs_sets - 1)
             # mode k is connected only to 0;
-            self.set_graph_edges[1:, 0] = np.ones(self.num_gcs_sets - 1)
+            self.set_graph_edges[1:, 0] = np.ones(self.opt.num_gcs_sets - 1)
 
-        elif self.problem_complexity == "obstacles":
-            self.set_graph_edges = np.zeros((self.num_gcs_sets, self.num_gcs_sets))
+        elif self.opt.problem_complexity == "obstacles":
             # TODO: this a slight hack, technically needs better implementation
-            # TODO: specifically, this is because i directly use the knowledge that 0 to everything everythin to 0
-            # for each set in mode 0
+            # TODO: specifically, this is because i directly use the knowledge that 0 to
+            # everything everythin to 0
 
-            # connnect 0 to other modes
+            # TODO: edges ought to be populated manually
+            # for each set in mode 0, connnect 0 to other modes
             for i in self.sets_per_mode[0]:
                 poly_i = self.set_id_to_polyhedron[i]
                 # for each other set
-                for j in range(i + 1, self.num_gcs_sets):
+                for j in range(i + 1, self.opt.num_gcs_sets):
                     poly_j = self.set_id_to_polyhedron[j]
-                    # print(poly_i, poly_j)
                     # if they intersect -- add an edge
                     if poly_i.IntersectsWith(poly_j):
                         self.set_graph_edges[i, j] = 1
                         self.set_graph_edges[j, i] = 1
 
             # connect other modes with themselves
-            for mode in range(1, self.num_modes):
+            for mode in range(1, self.opt.num_modes):
                 sets_in_mode = self.sets_per_mode[mode]
                 for set_id in sets_in_mode:
                     convex_set = self.get_convex_set_for_set_id(set_id)
@@ -867,7 +535,7 @@ class GCSforBlocks:
         # at horizon 0 we have just the start mode
         self.modes_per_layer[0] = {start_mode}
         # for horizons 1 through h-1:
-        for h in range(1, self.horizon):
+        for h in range(1, self.opt.horizon):
             modes_at_next_layer = set()
             # for each modes at previous horizon
             for m in self.modes_per_layer[h - 1]:
@@ -882,10 +550,10 @@ class GCSforBlocks:
         If a mode belongs to a layer, all of its sets belong to a layer.
         """
         assert (
-            len(self.modes_per_layer) == self.horizon
+            len(self.modes_per_layer) == self.opt.horizon
         ), "Must populate modes per layer first"
         # for each layer up to the horizon
-        for layer in range(self.horizon):
+        for layer in range(self.opt.horizon):
             self.sets_per_layer[layer] = set()
             # for each mode in that layer
             for mode_in_layer in self.modes_per_layer[layer]:
@@ -902,21 +570,22 @@ class GCSforBlocks:
         READY
         Use the edge matrix to determine which edges go into the vertex.
         """
-        assert 0 <= set_id < self.num_gcs_sets, "Set number out of bounds"
-        if self.problem_complexity == "transparent-no-obstacles":
+        assert 0 <= set_id < self.opt.num_gcs_sets, "Set number out of bounds"
+        if self.opt.problem_complexity == "transparent-no-obstacles":
             return [
                 v
-                for v in range(self.num_gcs_sets)
+                for v in range(self.opt.num_gcs_sets)
                 if self.set_graph_edges[v, set_id] == 1
             ]
-        elif self.problem_complexity == "obstacles":
+        elif self.opt.problem_complexity == "obstacles":
             edges = []
             mode = self.get_mode_from_set_id(set_id)
             # for each mode that enters into our mode
             modes_into_me = self.get_edges_into_mode(mode)
             for other_mode in modes_into_me:
-                if not self.no_cycles:
-                    assert other_mode != mode
+                assert (
+                    other_mode != mode
+                ), "I am not supposed to get same-mode edges from out of mode into me"
                 # for each set in that other mode
                 for i in self.sets_per_mode[other_mode]:
                     # check if there is an edge
@@ -931,10 +600,10 @@ class GCSforBlocks:
         edge matrix should contain only values for out of mode transitions
         here is where we deal with within-the-mode transitions
         """
-        assert 0 <= set_id < self.num_gcs_sets, "Set number out of bounds"
-        if self.problem_complexity == "transparent-no-obstacles":
+        assert 0 <= set_id < self.opt.num_gcs_sets, "Set number out of bounds"
+        if self.opt.problem_complexity == "transparent-no-obstacles":
             return []
-        elif self.problem_complexity == "obstacles":
+        elif self.opt.problem_complexity == "obstacles":
             mode = self.get_mode_from_set_id(set_id)
             edges = []
             for i in self.sets_per_mode[mode]:
@@ -948,14 +617,14 @@ class GCSforBlocks:
         READY
         Use the edge matrix to determine which edges go out of the vertex.
         """
-        assert 0 <= set_id < self.num_gcs_sets, "Set number out of bounds"
-        if self.problem_complexity == "transparent-no-obstacles":
+        assert 0 <= set_id < self.opt.num_gcs_sets, "Set number out of bounds"
+        if self.opt.problem_complexity == "transparent-no-obstacles":
             return [
                 v
-                for v in range(self.num_gcs_sets)
+                for v in range(self.opt.num_gcs_sets)
                 if self.set_graph_edges[set_id, v] == 1
             ]
-        elif self.problem_complexity == "obstacles":
+        elif self.opt.problem_complexity == "obstacles":
             edges = []
             mode = self.get_mode_from_set_id(set_id)
             # for each mode that we go into
@@ -985,16 +654,20 @@ class GCSforBlocks:
         READY
         Use the edge matrix to determine which edges go out of the vertex.
         """
-        assert 0 <= mode < self.num_modes, "Mode out of bounds"
-        return [v for v in range(self.num_modes) if self.mode_graph_edges[mode, v] == 1]
+        assert 0 <= mode < self.opt.num_modes, "Mode out of bounds"
+        return [
+            v for v in range(self.opt.num_modes) if self.mode_graph_edges[mode, v] == 1
+        ]
 
     def get_edges_into_mode(self, mode: int) -> T.List[int]:
         """
         READY
         Use the edge matrix to determine which edges go out of the vertex.
         """
-        assert 0 <= mode < self.num_modes, "Mode out of bounds"
-        return [v for v in range(self.num_modes) if self.mode_graph_edges[v, mode] == 1]
+        assert 0 <= mode < self.opt.num_modes, "Mode out of bounds"
+        return [
+            v for v in range(self.opt.num_modes) if self.mode_graph_edges[v, mode] == 1
+        ]
 
     ###################################################################################
     # Vertex and edge naming
@@ -1012,9 +685,19 @@ class GCSforBlocks:
     ###################################################################################
     # Solve and display solution
 
-    def solve(self, use_convex_relaxation=True, max_rounded_paths=30, show_graph=False):
+    def solve(
+        self,
+        use_convex_relaxation=None,
+        max_rounded_paths=None,
+        show_graph=False,
+    ):
         """Solve the GCS program. Must build the graph first."""
         assert self.graph_built, "Must build graph first!"
+        if use_convex_relaxation is None:
+            use_convex_relaxation = self.opt.use_convex_relaxation
+        if max_rounded_paths is None:
+            max_rounded_paths = self.opt.max_rounded_paths
+
         start_vertex = self.name_to_vertex["start"].id()
         target_vertex = self.name_to_vertex["target"].id()
         options = opt.GraphOfConvexSetsOptions()
@@ -1035,13 +718,13 @@ class GCSforBlocks:
             self.display_graph()
 
     def display_graph(self) -> None:
-        """Use pydot to visually inspect the graph. If solution acquired -- also displays the solution."""
+        """Visually inspect the graph. If solution acquired -- also displays the solution."""
         assert self.graph_built, "Must build graph first!"
         if self.solution.is_success():
             graphviz = self.gcs.GetGraphvizString(self.solution, True, precision=1)
         else:
             graphviz = self.gcs.GetGraphvizString()
-        data = pydot.graph_from_dot_data(graphviz)[0]
+        data = pydot.graph_from_dot_data(graphviz)[0]  # type: ignore
         plt = Image(data.create_png())
         display(plt)
 
@@ -1062,8 +745,8 @@ class GCSforBlocks:
         else:
             return [start] + self.find_path_to_target(edges, v)
 
-    def get_solution_path(self) -> T.Tuple[T.List[str], npt.NDArray[np.float64]]:
-        """Given a solved GCS problem, and assuming that it's tight, find a path from start to target"""
+    def get_solution_path(self) -> T.Tuple[T.List[str], npt.NDArray]:
+        """Given a solved GCS problem, and assuming it's tight, find a path from start to target"""
         assert self.graph_built, "Must build graph first!"
         assert self.solution.is_success(), "Solution was not found"
         # find edges with non-zero flow
@@ -1095,7 +778,7 @@ class GCSforBlocks:
         INFO("Solution is:")
         INFO("-----------------------")
         for i in range(len(modes)):
-            sg = vertices[i][0 : self.block_dim]
+            sg = vertices[i][0 : self.opt.block_dim]
             if modes[i] == "start":
                 INFO("Start at", sg)
             elif modes[i] == "target":

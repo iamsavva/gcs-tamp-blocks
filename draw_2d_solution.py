@@ -4,7 +4,12 @@ import numpy as np
 import numpy.typing as npt
 
 # from gcs import GCSforBlocks
-from test import make_simple_transparent_gcs_test, make_simple_swap_two, make_simple_swap_three
+from test import (
+    make_simple_transparent_gcs_test,
+    make_simple_swap_two,
+    make_simple_swap_three,
+    make_simple_set_based,
+)
 
 try:
     from tkinter import Tk, Canvas, Toplevel
@@ -23,8 +28,17 @@ BLACK = "#0B032D"
 BACKGROUND = "#F5E9E2"
 CELL_WIDTH = 100
 
+
 class Draw2DSolution:
-    def __init__(self, num_modes: int, ub: float, mode_solution, vertex_solution, goal):
+    def __init__(
+        self,
+        num_modes: int,
+        ub: float,
+        mode_solution,
+        vertex_solution,
+        goal,
+        just_two=False,
+    ):
         assert num_modes - 1 <= len(BLOCK_COLORS), "Not enough block colors"
         self.num_modes = num_modes
         self.ub = ub
@@ -47,6 +61,7 @@ class Draw2DSolution:
 
         self.width = self.cell_scaling * self.ub + self.padding * 2 + self.border * 2
         self.goal = goal
+        self.just_two = just_two
 
         self.tk = Tk()
         self.tk.withdraw()
@@ -222,22 +237,36 @@ class Draw2DSolution:
         )
 
     def draw_goal(self):
-        self.draw_shadow(self.goal[0:2], "arm")
-        for i in range(1, self.num_modes):
-            self.draw_shadow(self.goal[2 * i : 2 * i + 2], i)
+        if self.just_two:
+            self.draw_shadow(self.goal, "2")
+        else:
+            self.draw_shadow(self.goal[0:2], "arm")
+            for i in range(1, self.num_modes):
+                self.draw_shadow(self.goal[2 * i : 2 * i + 2], i)
 
 
-block_dim = 2
+block_dim = 3
 
-num_blocks = 5
+num_blocks = 10
 # num_blocks = 3
-horizon = 12
-use_convex_relaxation=True
+horizon = 25
+use_convex_relaxation = True
 
 # gcs, ub, goal = make_simple_swap_two(horizon, max_rounded_paths=200, use_convex_relaxation=use_convex_relaxation)
 # gcs, ub, goal = make_simple_swap_three(horizon, max_rounded_paths=200, use_convex_relaxation=use_convex_relaxation)
+# gcs, ub, goal = make_simple_transparent_gcs_test(block_dim, num_blocks, horizon, max_rounded_paths=200, use_convex_relaxation=use_convex_relaxation)
 
-gcs, ub, goal = make_simple_transparent_gcs_test(block_dim, num_blocks, horizon, max_rounded_paths=200, use_convex_relaxation=use_convex_relaxation)
+
+# gcs, ub, goal = make_simple_transparent_gcs_test(block_dim, num_blocks, horizon, max_rounded_paths=300, use_convex_relaxation=use_convex_relaxation)
+
+gcs, ub, goal = make_simple_set_based(
+    horizon=7, use_convex_relaxation=True, max_rounded_paths=100, display_graph=False
+)
+
+# horizon: int,
+#     use_convex_relaxation=True,
+#     max_rounded_paths: int = 30,
+#     display_graph: bool = False,
 
 assert gcs.solution.is_success(), "Solution was not found"
 modes, vertices = gcs.get_solution_path()
@@ -246,5 +275,5 @@ for i in range(len(vertices)):
 
 print(modes)
 print(vertices)
-drawer = Draw2DSolution(num_blocks + 1, ub, modes, vertices, goal)
+drawer = Draw2DSolution(num_blocks + 1, ub, modes, vertices, goal, just_two=True)
 drawer.draw_solution()

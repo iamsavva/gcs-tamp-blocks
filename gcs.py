@@ -10,7 +10,7 @@ from IPython.display import Image, display
 import time
 
 import pydrake.geometry.optimization as opt
-from pydrake.geometry.optimization import Point, GraphOfConvexSets, HPolyhedron, Iris
+from pydrake.geometry.optimization import Point, GraphOfConvexSets, HPolyhedron
 from pydrake.solvers import (
     Binding,
     Cost,
@@ -19,9 +19,9 @@ from pydrake.solvers import (
     LinearEqualityConstraint,
     LinearCost,
 )
-from pydrake.common import RandomGenerator
 
 from util import ERROR, WARN, INFO, YAY
+from iris import sampling_based_IRIS_tesselation
 
 
 class GCSforBlocks:
@@ -105,7 +105,7 @@ class GCSforBlocks:
         self.set_graph_edges = np.array(
             []
         )  # np.NDArray, size num_gcs_sets x num_gcs_sets
-        self.set_id_to_polyhedron = dict() # T.Dict[int, HPolyhedron]
+        self.set_id_to_polyhedron = dict()  # T.Dict[int, HPolyhedron]
         self.num_gcs_sets = -1
 
     ###################################################################################
@@ -182,7 +182,7 @@ class GCSforBlocks:
                             self.add_edge(left_vertex, new_vertex, left_vertex_set_id)
                         except:
                             pass
-            
+
             if not self.no_cycles:
                 # connect the vertices within the mode
                 for left_vertex_set_id in self.sets_per_mode[mode]:
@@ -193,7 +193,9 @@ class GCSforBlocks:
                     left_vertex = self.name_to_vertex[left_vertex_name]
                     # connect left vertex with other vertices within this mode
                     for right_vertex_set_id in connections_within_mode:
-                        right_vertex_name = self.get_vertex_name(layer, right_vertex_set_id)
+                        right_vertex_name = self.get_vertex_name(
+                            layer, right_vertex_set_id
+                        )
                         right_vertex = self.name_to_vertex[right_vertex_name]
                         self.add_edge(
                             left_vertex,
@@ -253,7 +255,10 @@ class GCSforBlocks:
                     right_vertex_name = self.get_vertex_name(0, right_vertex_set_id)
                     right_vertex = self.name_to_vertex[right_vertex_name]
                     self.add_edge(
-                        left_vertex, right_vertex, left_vertex_set_id, add_grasp_cost=False
+                        left_vertex,
+                        right_vertex,
+                        left_vertex_set_id,
+                        add_grasp_cost=False,
                     )
 
     def add_target_node(self, target_state: Point, target_mode: int) -> None:
@@ -270,7 +275,8 @@ class GCSforBlocks:
         sets_with_target = []
         for set_in_mode in sets_in_target_mode:
             convex_set = self.get_convex_set_for_set_id(set_in_mode)
-            if convex_set.PointInSet(target_state.x()):
+            if convex_set.IntersectsWith(target_state):
+                # if convex_set.PointInSet(target_state.x()):
                 sets_with_target += [set_in_mode]
         assert (
             len(sets_with_target) > 0
@@ -643,7 +649,9 @@ class GCSforBlocks:
         NEEDS TESTING
         """
 
-        def combine_sets(A_1:npt.NDArray, A_2:npt.NDArray, b_1:npt.NDArray, b_2:npt.NDArray):
+        def combine_sets(
+            A_1: npt.NDArray, A_2: npt.NDArray, b_1: npt.NDArray, b_2: npt.NDArray
+        ):
             A, b = np.vstack((A_1, A_2)), np.hstack((b_1, b_2))
             return HPolyhedron(A, b)
 
@@ -666,14 +674,11 @@ class GCSforBlocks:
             mode, conf_space_dom_A, conf_space_dom_b
         )
 
-        # ERROR(mode_space_dom_A, mode_space_dom_b)
-
         mode_space_domain = HPolyhedron(mode_space_dom_A, mode_space_dom_b)
         mode_space_domain = mode_space_domain.ReduceInequalities()
-        # ERROR(mode_space_domain.A(), mode_space_domain.b())
 
         # get IRIS tesselation
-        mode_space_tesselation = self.get_IRIS_tesselation(
+        mode_space_tesselation = sampling_based_IRIS_tesselation(
             mode_space_obstacles, mode_space_domain
         )
         # move IRIS tesselation into configuration space
@@ -690,45 +695,6 @@ class GCSforBlocks:
         INFO("Iris finished mode", mode)
         return convex_sets_for_mode
 
-    def get_IRIS_tesselation(
-        self,
-        obstacles: T.List[HPolyhedron],
-        domain: HPolyhedron,
-        max_num_sets: int = 9,
-        max_num_samples: int = 100,
-    ) -> T.List[HPolyhedron]:
-        """
-        NEEDS TESTING
-        """
-        sample_counter = 0
-        previous_sample = None
-        convex_sets = []
-        generator = RandomGenerator()
-        while sample_counter < max_num_samples:
-            # sample a point
-            sample_counter += 1
-            if previous_sample is None:
-                new_sample = domain.UniformSample(generator)
-            else:
-                new_sample = domain.UniformSample(generator, previous_sample=previous_sample)
-            previous_sample = new_sample
-            # check that a sampled point is not in any obstacle or in already attained set
-            sample_not_inside_obstacle_or_existing_sets = True
-            for some_set in obstacles + convex_sets:
-                if some_set.PointInSet(new_sample):
-                    sample_not_inside_obstacle_or_existing_sets = False
-                    break
-            if not sample_not_inside_obstacle_or_existing_sets:
-                continue
-            convex_set = Iris(obstacles, new_sample, domain)
-
-            convex_sets.append(convex_set)
-            if len(convex_sets) == max_num_sets:
-                INFO("found max number of convex sets")
-                return convex_sets
-        INFO("sampled many points")
-        return convex_sets
-
     ###################################################################################
     # build sets that are inside the modes
 
@@ -739,7 +705,7 @@ class GCSforBlocks:
         """
         assert self.problem_complexity in (
             "transparent-no-obstacles",
-            "obstacles"
+            "obstacles",
         ), "Problem complexity option not implemented"
         if self.problem_complexity == "transparent-no-obstacles":
             for mode in range(self.num_modes):
@@ -772,7 +738,8 @@ class GCSforBlocks:
         """
         assert 0 <= set_id < self.num_gcs_sets, "Set number out of bounds"
         assert self.problem_complexity in (
-            "transparent-no-obstacles", "obstacles"
+            "transparent-no-obstacles",
+            "obstacles",
         ), "Problem complexity option not implemented"
         if self.problem_complexity == "transparent-no-obstacles":
             mode = set_id
@@ -792,7 +759,7 @@ class GCSforBlocks:
         """
         assert self.problem_complexity in (
             "transparent-no-obstacles",
-            "obstacles"
+            "obstacles",
         ), "Problem complexity option not implemented"
         if self.problem_complexity == "transparent-no-obstacles":
             mode = set_id
@@ -847,7 +814,7 @@ class GCSforBlocks:
         """
         assert self.problem_complexity in (
             "transparent-no-obstacles",
-            "obstacles"
+            "obstacles",
         ), "Problem complexity option not implemented"
 
         if self.problem_complexity == "transparent-no-obstacles":
@@ -870,13 +837,13 @@ class GCSforBlocks:
             for i in self.sets_per_mode[0]:
                 poly_i = self.set_id_to_polyhedron[i]
                 # for each other set
-                for j in range(i+1, self.num_gcs_sets):
+                for j in range(i + 1, self.num_gcs_sets):
                     poly_j = self.set_id_to_polyhedron[j]
                     # print(poly_i, poly_j)
                     # if they intersect -- add an edge
                     if poly_i.IntersectsWith(poly_j):
-                        self.set_graph_edges[i,j] = 1
-                        self.set_graph_edges[j,i] = 1
+                        self.set_graph_edges[i, j] = 1
+                        self.set_graph_edges[j, i] = 1
 
             # connect other modes with themselves
             for mode in range(1, self.num_modes):
@@ -885,12 +852,12 @@ class GCSforBlocks:
                     convex_set = self.get_convex_set_for_set_id(set_id)
                     for other_set_id in sets_in_mode:
                         if set_id != other_set_id:
-                            other_convex_set = self.get_convex_set_for_set_id(other_set_id)
+                            other_convex_set = self.get_convex_set_for_set_id(
+                                other_set_id
+                            )
                             if convex_set.IntersectsWith(other_convex_set):
                                 self.set_graph_edges[set_id, other_set_id] = 1
                                 self.set_graph_edges[other_set_id, set_id] = 1
-
-
 
     def populate_modes_per_layer(self, start_mode: int) -> None:
         """
@@ -938,7 +905,9 @@ class GCSforBlocks:
         assert 0 <= set_id < self.num_gcs_sets, "Set number out of bounds"
         if self.problem_complexity == "transparent-no-obstacles":
             return [
-                v for v in range(self.num_gcs_sets) if self.set_graph_edges[v, set_id] == 1
+                v
+                for v in range(self.num_gcs_sets)
+                if self.set_graph_edges[v, set_id] == 1
             ]
         elif self.problem_complexity == "obstacles":
             edges = []
@@ -955,7 +924,7 @@ class GCSforBlocks:
                         edges.append(i)
             return edges
         raise NotImplementedError
-            
+
     def get_edges_within_same_mode(self, set_id: int) -> T.List[int]:
         """
         READY
@@ -982,7 +951,9 @@ class GCSforBlocks:
         assert 0 <= set_id < self.num_gcs_sets, "Set number out of bounds"
         if self.problem_complexity == "transparent-no-obstacles":
             return [
-                v for v in range(self.num_gcs_sets) if self.set_graph_edges[set_id, v] == 1
+                v
+                for v in range(self.num_gcs_sets)
+                if self.set_graph_edges[set_id, v] == 1
             ]
         elif self.problem_complexity == "obstacles":
             edges = []
@@ -1000,10 +971,14 @@ class GCSforBlocks:
         raise NotImplementedError
 
     def get_edges_into_set(self, set_id):
-        return self.get_edges_into_set_out_of_mode(set_id) + self.get_edges_within_same_mode(set_id)
-        
+        return self.get_edges_into_set_out_of_mode(
+            set_id
+        ) + self.get_edges_within_same_mode(set_id)
+
     def get_edges_out_of_set(self, set_id):
-        return self.get_edges_out_of_set_out_of_mode(set_id) + self.get_edges_within_same_mode(set_id)
+        return self.get_edges_out_of_set_out_of_mode(
+            set_id
+        ) + self.get_edges_within_same_mode(set_id)
 
     def get_edges_out_of_mode(self, mode: int) -> T.List[int]:
         """

@@ -37,6 +37,14 @@ class EdgeOptions:
         return EdgeOptions(True, True, False, True, add_grasp_cost)
 
     @staticmethod
+    def into_in_out_edge() -> "EdgeOptions":
+        return EdgeOptions(True, True, False, True, False)
+
+    @staticmethod
+    def out_of_in_out_edge() -> "EdgeOptions":
+        return EdgeOptions(False, False, True, False, True)
+
+    @staticmethod
     def equality_edge() -> "EdgeOptions":
         return EdgeOptions(False, False, True, False, False)
 
@@ -75,10 +83,6 @@ class GCSforBlocksOptions:
     # when solving, this is the max number of rounded paths
     max_rounded_paths: int = 50
     use_convex_relaxation: bool = True
-
-    # for each mode, consider creating an unconstrained in/out node.
-    # those this makes the problem significantly less tight, it reduces the number of edges.
-    one_in_one_out = False
 
     # whether source and target ought to be connected to just one set in the mode
     # TODO: this should really be a default behavior always;

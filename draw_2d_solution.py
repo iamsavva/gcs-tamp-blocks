@@ -8,6 +8,7 @@ from test import (
     make_some_simple_transparent_tests,
     make_simple_obstacle_swap_two,
     make_simple_transparent_gcs_test,
+    make_simple_obstacle_swap_two_in_out,
 )
 
 try:
@@ -250,7 +251,9 @@ class Draw2DSolution:
 
 if __name__ == "__main__":
     # gcs, ub, goal = make_simple_obstacle_swap_two()
-    gcs, ub, goal = make_simple_transparent_gcs_test(2, 7, 18)
+    gcs, ub, goal = make_simple_obstacle_swap_two_in_out()
+
+    # gcs, ub, goal = make_simple_transparent_gcs_test(2, 7, 18)
 
     assert gcs.solution.is_success(), "Solution was not found"
     modes, vertices = gcs.get_solution_path()

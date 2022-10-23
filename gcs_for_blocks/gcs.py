@@ -684,27 +684,15 @@ class GCSforBlocks:
     # Vertex and edge naming
 
     def get_vertex_name(self, layer: int, set_id: int) -> str:
-        """
-        Naming convention is:
-            M_<layer>_<set_id> for regular nodes
-            M_<layer> for in-out node that goes into the layer
-        """
-        if self.opt.one_in_one_out and set_id == -1:
-            return "M_" + str(layer)
+        """Naming convention is: M_<layer>_<set_id> for regular nodes"""
         return "M_" + str(layer) + "_" + str(set_id)
 
     def get_set_id_from_vertex_name(self, name: str) -> int:
         assert name not in ("start", "target"), "Trying to get set id for bad sets!"
-        assert not (
-            self.opt.one_in_one_out and len(name.split("_")) == 2
-        ), "Trying to get set id for in-out set!"
         set_id = int(name.split("_")[-1])
         return set_id
 
     def get_mode_from_vertex_name(self, name: str) -> int:
-        assert not (
-            self.opt.one_in_one_out and len(name.split("_")) == 2
-        ), "Trying to get mode for in-out set!"
         if name == "start":
             return self.start_mode
         if name == "target":

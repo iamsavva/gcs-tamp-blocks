@@ -6,6 +6,7 @@ import numpy as np
 import numpy.typing as npt
 
 from gcs_for_blocks.gcs import GCSforBlocks
+from gcs_for_blocks.gcs_in_out import GCSforBlocksOneInOneOut
 from gcs_for_blocks.gcs_options import GCSforBlocksOptions
 from gcs_for_blocks.util import INFO
 
@@ -14,12 +15,45 @@ from pydrake.geometry.optimization import (  # pylint: disable=import-error
 )
 
 
-def make_simple_obstacle_swap_two() -> T.Tuple[GCSforBlocks, npt.NDArray, T.List]:
+def make_simple_obstacle_swap_two_in_out(
+    use_convex_relaxation: bool = False, max_rounded_paths: int = 100
+) -> T.Tuple[GCSforBlocksOneInOneOut, npt.NDArray, T.List]:
+    INFO("--------------------------")
+    INFO("Test case: 2D, Obstacles, 2 blocks IN OUT\n")
+    options = GCSforBlocksOptions(num_blocks=2, block_dim=2, horizon=10)
+    options.problem_complexity = "obstacles"
+    options.use_convex_relaxation = use_convex_relaxation
+    options.max_rounded_paths = max_rounded_paths
+
+    gcs = GCSforBlocksOneInOneOut(options)
+    width = 1.0
+    ub = np.array([2, 2])
+    gcs.set_block_width(width)
+    gcs.set_ub(ub)
+
+    initial_state = [1, 0, 1, 1, 1, 2]
+    initial_point = Point(np.array(initial_state))
+    final_state = [1, 0, 1, 2, 1, 1]
+    final_point = Point(np.array(final_state))
+
+    gcs.build_the_graph(initial_point, 0, final_point, 0)
+    gcs.solve()
+    try:
+        gcs.verbose_solution_description()
+    except:
+        pass
+    return gcs, ub, final_state
+
+
+def make_simple_obstacle_swap_two(
+    use_convex_relaxation: bool = False, max_rounded_paths: int = 100
+) -> T.Tuple[GCSforBlocks, npt.NDArray, T.List]:
     INFO("--------------------------")
     INFO("Test case: 2D, Obstacles, 2 blocks\n")
     options = GCSforBlocksOptions(num_blocks=2, block_dim=2, horizon=10)
     options.problem_complexity = "obstacles"
-    options.use_convex_relaxation = False
+    options.use_convex_relaxation = use_convex_relaxation
+    options.max_rounded_paths = max_rounded_paths
 
     gcs = GCSforBlocks(options)
     width = 1.0
@@ -34,7 +68,10 @@ def make_simple_obstacle_swap_two() -> T.Tuple[GCSforBlocks, npt.NDArray, T.List
 
     gcs.build_the_graph(initial_point, 0, final_point, 0)
     gcs.solve()
-    gcs.verbose_solution_description()
+    try:
+        gcs.verbose_solution_description()
+    except:
+        pass
     return gcs, ub, final_state
 
 

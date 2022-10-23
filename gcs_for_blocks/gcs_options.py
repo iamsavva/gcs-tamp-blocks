@@ -1,3 +1,46 @@
+class EdgeOptions:
+    """
+    Option class for edge connectivity.
+    """
+
+    # right point belongs to orbit of left point in left mode
+    add_orbital_constraint = False
+    # right point belongs to same set as left point
+    add_set_transition_constraint = False
+    # right point equal to left point
+    add_equality_constraint = False
+    # L2 norm on gripper movement
+    add_gripper_movement_cost = False
+    # add a constant term if performing a mode transition
+    add_grasp_cost = False
+
+    def __init__(
+        self,
+        add_orbital_constraint: bool,
+        add_set_transition_constraint: bool,
+        add_equality_constraint: bool,
+        add_gripper_movement_cost: bool,
+        add_grasp_cost: bool,
+    ):
+        self.add_orbital_constraint = add_orbital_constraint
+        self.add_set_transition_constraint = add_set_transition_constraint
+        self.add_equality_constraint = add_equality_constraint
+        self.add_gripper_movement_cost = add_gripper_movement_cost
+        self.add_grasp_cost = add_grasp_cost
+
+    @staticmethod
+    def within_mode_edge() -> "EdgeOptions":
+        return EdgeOptions(True, True, False, True, False)
+
+    @staticmethod
+    def between_modes_edge(add_grasp_cost: bool) -> "EdgeOptions":
+        return EdgeOptions(True, True, False, True, add_grasp_cost)
+
+    @staticmethod
+    def equality_edge() -> "EdgeOptions":
+        return EdgeOptions(False, False, True, False, False)
+
+
 class GCSforBlocksOptions:
     """
     Option class for GCSforBlocks.
@@ -16,7 +59,7 @@ class GCSforBlocksOptions:
 
     # add a time cost on each edge? this is done to "regularize" the trajectory
     # goal is to reduce possibility of pointlessly grasping and ungrasping in place
-    add_time_cost: bool = True
+    add_grasp_cost: bool = True
     time_cost_weight: float = 1.0  # relative weight between
 
     # obstacle avoidance
@@ -35,7 +78,7 @@ class GCSforBlocksOptions:
 
     # for each mode, consider creating an unconstrained in/out node.
     # those this makes the problem significantly less tight, it reduces the number of edges.
-    in_and_out_through_a_single_node = False
+    one_in_one_out = False
 
     # whether source and target ought to be connected to just one set in the mode
     # TODO: this should really be a default behavior always;
@@ -66,7 +109,7 @@ class GCSforBlocksOptions:
         horizon: int,
         block_width: float = 1.0,
         allow_self_transitions_for_modes=False,
-        add_time_cost: bool = True,
+        add_grasp_cost: bool = True,
         time_cost_weight: float = 1.0,
         problem_complexity: str = "obstacles",
         max_rounded_paths: int = 40,
@@ -80,7 +123,7 @@ class GCSforBlocksOptions:
         self.horizon = horizon
         self.block_width = block_width
         self.allow_self_transitions_for_modes = allow_self_transitions_for_modes
-        self.add_time_cost = add_time_cost
+        self.add_grasp_cost = add_grasp_cost
         self.time_cost_weight = time_cost_weight
         self.problem_complexity = problem_complexity
         self.max_rounded_paths = max_rounded_paths

@@ -72,3 +72,15 @@ def sampling_based_IRIS_tesselation(
     if len(convex_sets) == 0:
         WARN("IRIS couldn't find a single region!")
     return convex_sets
+
+
+# def handbuilt_iris_regions(self, num_other_blocks, block_dim):
+#     num_blocks = num_other_blocks + 1
+#     state_dim = num_blocks * block_dim
+    
+#     letter_options = ['a', 'b', 'l', 'r']
+
+    # for each letter sequence
+    # add constraint per block 
+
+

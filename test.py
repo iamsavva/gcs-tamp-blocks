@@ -7,6 +7,7 @@ import numpy.typing as npt
 
 from gcs_for_blocks.gcs import GCSforBlocks
 from gcs_for_blocks.gcs_in_out import GCSforBlocksOneInOneOut
+from gcs_for_blocks.gcs_exp import GCSforBlocksExp
 from gcs_for_blocks.gcs_options import GCSforBlocksOptions
 from gcs_for_blocks.util import INFO
 
@@ -122,6 +123,54 @@ def make_simple_transparent_gcs_test(
         gcs.display_graph()
     return gcs, ub, final_state
 
+def make_simple_exp(
+    block_dim: int,
+    num_blocks: int,
+    horizon: int,
+    use_convex_relaxation: bool = True,
+    max_rounded_paths: int = 100,
+    display_graph: bool = False,
+) -> T.Tuple[GCSforBlocks, npt.NDArray, T.List]:
+
+    options = GCSforBlocksOptions(
+        block_dim=block_dim, num_blocks=num_blocks, horizon=horizon
+    )
+    options.use_convex_relaxation = use_convex_relaxation
+    options.max_rounded_paths = max_rounded_paths
+    options.problem_complexity = "transparent-no-obstacles"
+
+    gcs = GCSforBlocksExp(options)
+
+    width = 1
+    scaling = 0.5
+    ub_float = scaling * width * 2 * (num_blocks + 1)
+    ub = np.tile((np.array(ub_float)), block_dim)
+    gcs.set_block_width(width)
+    gcs.set_ub(ub)
+
+    # make initial state
+    initial_state = []
+    for i in range(options.num_modes):
+        block_state = [0] * options.block_dim
+        block_state[0] = scaling * width * (2 * i + 1)  # type: ignore
+        initial_state += block_state
+    initial_point = Point(np.array(initial_state))
+    # make final state
+    final_state = []
+    for i in range(options.num_modes):
+        block_state = [ub_float] * options.block_dim
+        block_state[0] = ub_float - scaling * width * (2 * i + 1)
+        final_state += block_state
+    final_point = Point(np.array(final_state))
+
+    gcs.build_the_graph(initial_point, 0, final_point, 0)
+    gcs.solve(
+        use_convex_relaxation=use_convex_relaxation, max_rounded_paths=max_rounded_paths
+    )
+    # gcs.verbose_solution_description()
+    if display_graph:
+        gcs.display_graph()
+    return gcs, ub, final_state
 
 def make_some_simple_transparent_tests():
     INFO("--------------------------")
@@ -136,5 +185,6 @@ def make_some_simple_transparent_tests():
 
 
 if __name__ == "__main__":
-    make_simple_obstacle_swap_two()
-    make_some_simple_transparent_tests()
+    make_simple_exp(2, 3, 5)
+    # make_simple_obstacle_swap_two()
+    # make_some_simple_transparent_tests()

@@ -1,3 +1,47 @@
+class EdgeOptExp:
+    """
+    Option class for edge connectivity.
+    """
+
+    add_orbital_constraint = False
+    add_grasp_constraint = False
+    add_ungrasp_constraint = False
+    add_equality_constraint = False
+    add_gripper_movement_cost = False
+    add_grasp_cost = False
+
+    def __init__(
+        self,
+        add_orbital_constraint: bool,
+        add_grasp_constraint: bool,
+        add_ungrasp_constraint: bool,
+        add_equality_constraint: bool,
+        add_gripper_movement_cost: bool,
+        add_grasp_cost: bool,
+    ):
+        self.add_orbital_constraint = add_orbital_constraint
+        self.add_grasp_constraint = add_grasp_constraint
+        self.add_ungrasp_constraint = add_ungrasp_constraint
+        self.add_equality_constraint = add_equality_constraint
+        self.add_gripper_movement_cost = add_gripper_movement_cost
+        self.add_grasp_cost = add_grasp_cost
+
+    @staticmethod
+    def move_edge() -> "EdgeOptExp":
+        return EdgeOptExp(True, False, False, False, True, False)
+
+    @staticmethod
+    def grasp_edge() -> "EdgeOptExp":
+        return EdgeOptExp(False, True, False, False, False, True)
+
+    @staticmethod
+    def ungrasp_edge() -> "EdgeOptExp":
+        return EdgeOptExp(False, False, True, False, False, True)
+
+    @staticmethod
+    def equality_edge() -> "EdgeOptExp":
+        return EdgeOptExp(False, False, False, True, False, False)
+
 class EdgeOptions:
     """
     Option class for edge connectivity.
@@ -88,6 +132,8 @@ class GCSforBlocksOptions:
     # TODO: this should really be a default behavior always;
     # it reduces the number of edges and cycles
     connect_source_target_to_single_set: bool = True
+
+    split_move = False
 
     @property
     def num_modes(self) -> int:

@@ -745,7 +745,7 @@ class GCSforBlocks:
         """Visually inspect the graph. If solution acquired -- also displays the solution."""
         assert self.graph_built, "Must build graph first!"
         if self.solution.is_success():
-            graphviz = self.gcs.GetGraphvizString(self.solution, True, precision=1)
+            graphviz = self.gcs.GetGraphvizString(self.solution, True, precision=2)
         else:
             graphviz = self.gcs.GetGraphvizString()
         data = pydot.graph_from_dot_data(graphviz)[0]  # type: ignore
@@ -796,7 +796,7 @@ class GCSforBlocks:
         assert self.solution.is_success(), "Solution was not found"
         modes, vertices = self.get_solution_path()
         for i in range(len(vertices)):
-            vertices[i] = ["%.1f" % v for v in vertices[i]]
+            vertices[i] = ["%.2f" % v for v in vertices[i]]
         mode_now = modes[1]
         INFO("-----------------------")
         INFO("Solution is:")

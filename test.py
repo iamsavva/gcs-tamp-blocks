@@ -118,7 +118,8 @@ def make_simple_transparent_gcs_test(
     gcs.solve(
         use_convex_relaxation=use_convex_relaxation, max_rounded_paths=max_rounded_paths
     )
-    gcs.verbose_solution_description()
+    if gcs.solution.is_success() and (max_rounded_paths > 0 or use_convex_relaxation == False): 
+        gcs.verbose_solution_description()
     if display_graph:
         gcs.display_graph()
     return gcs, ub, final_state
@@ -143,7 +144,7 @@ def make_simple_exp(
 
     width = 1
     scaling = 0.5
-    ub_float = scaling * width * 2 * (num_blocks + 1)
+    ub_float = scaling * width * 2 * (num_blocks )
     ub = np.tile((np.array(ub_float)), block_dim)
     gcs.set_block_width(width)
     gcs.set_ub(ub)
@@ -152,14 +153,14 @@ def make_simple_exp(
     initial_state = []
     for i in range(options.num_modes):
         block_state = [0] * options.block_dim
-        block_state[0] = scaling * width * (2 * i + 1)  # type: ignore
+        block_state[0] = scaling * width * (2 * i )  # type: ignore
         initial_state += block_state
     initial_point = Point(np.array(initial_state))
     # make final state
     final_state = []
     for i in range(options.num_modes):
         block_state = [ub_float] * options.block_dim
-        block_state[0] = ub_float - scaling * width * (2 * i + 1)
+        block_state[0] = ub_float - scaling * width * (2 * i )
         final_state += block_state
     final_point = Point(np.array(final_state))
 
@@ -185,6 +186,6 @@ def make_some_simple_transparent_tests():
 
 
 if __name__ == "__main__":
-    make_simple_exp(2, 3, 5)
+    make_simple_exp(2, 5, 5, max_rounded_paths=0)
     # make_simple_obstacle_swap_two()
     # make_some_simple_transparent_tests()

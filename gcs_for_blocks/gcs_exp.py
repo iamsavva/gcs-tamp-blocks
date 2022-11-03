@@ -115,8 +115,8 @@ class GCSforBlocksExp(GCSforBlocks):
                 self.add_edge("GM_"+i, "F_"+i_1, block, EdgeOptExp.ungrasp_edge(), "Ungrasp "+ str(block) + " at " + i)
 
             # target: add equalities with FM_
-            if j >= self.opt.num_blocks-2:
-                self.add_edge("FM_"+i_1, "target", 0 , EdgeOptExp.equality_edge(), "Eq Target at " + i_1)
+            # if j >= self.opt.num_blocks-2:
+            self.add_edge("FM_"+i_1, "target", 0 , EdgeOptExp.equality_edge(), "Eq Target at " + i_1)
 
         self.add_edge("F_"+str(self.opt.horizon), "FM_"+str(self.opt.horizon), 0, EdgeOptExp.move_edge(), "Move free at " + str(self.opt.horizon))
 

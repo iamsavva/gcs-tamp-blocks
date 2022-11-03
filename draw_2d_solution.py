@@ -26,7 +26,7 @@ ARM_NOT_EMPTY_COLOR = "#5E3886"  # 5E3886 621940
 TEXT_COLOR = "#0B032D"
 BLACK = "#0B032D"
 BACKGROUND = "#F5E9E2"
-CELL_WIDTH = 100
+CELL_WIDTH = 30
 
 
 class Draw2DSolution:
@@ -251,9 +251,11 @@ class Draw2DSolution:
 
 if __name__ == "__main__":
     # gcs, ub, goal = make_simple_obstacle_swap_two()
-    gcs, ub, goal = make_simple_obstacle_swap_two_in_out()
+    # gcs, ub, goal = make_simple_obstacle_swap_two_in_out()
 
     # gcs, ub, goal = make_simple_transparent_gcs_test(2, 7, 18)
+
+    gcs, ub, goal = make_simple_transparent_gcs_test(2,10,21, use_convex_relaxation=False, display_graph=False, max_rounded_paths=0, add_grasp_cost = False)
 
     assert gcs.solution.is_success(), "Solution was not found"
     modes, vertices = gcs.get_solution_path()

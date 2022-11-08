@@ -73,6 +73,10 @@ class EdgeOptions:
         self.add_grasp_cost = add_grasp_cost
 
     @staticmethod
+    def mode_transition_edge(add_grasp_cost: bool) -> "EdgeOptions":
+        return EdgeOptions(False, True, True, True, add_grasp_cost)
+
+    @staticmethod
     def within_mode_edge() -> "EdgeOptions":
         return EdgeOptions(True, True, False, True, False)
 
@@ -133,8 +137,6 @@ class GCSforBlocksOptions:
     # it reduces the number of edges and cycles
     connect_source_target_to_single_set: bool = True
 
-    split_move = False
-
     @property
     def num_modes(self) -> int:
         """
@@ -180,5 +182,4 @@ class GCSforBlocksOptions:
         self.use_convex_relaxation = use_convex_relaxation
         self.connect_source_target_to_single_set = connect_source_target_to_single_set
         self.in_and_out_through_a_single_node = in_and_out_through_a_single_node
-
         self.num_gcs_sets = -1

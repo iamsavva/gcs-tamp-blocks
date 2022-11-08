@@ -686,9 +686,9 @@ class GCSforBlocks:
     ###################################################################################
     # Vertex and edge naming
 
-    def get_vertex_name(self, layer: int, set_id: int) -> str:
+    def get_vertex_name(self, layer: int, set_id: int, t = "") -> str:
         """Naming convention is: M_<layer>_<set_id> for regular nodes"""
-        return "M_" + str(layer) + "_" + str(set_id)
+        return t+"M_" + str(layer) + "_" + str(set_id)
 
     def get_set_id_from_vertex_name(self, name: str) -> int:
         assert name not in ("start", "target"), "Trying to get set id for bad sets!"

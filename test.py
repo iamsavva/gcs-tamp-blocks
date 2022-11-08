@@ -8,6 +8,7 @@ import numpy.typing as npt
 from gcs_for_blocks.gcs import GCSforBlocks
 from gcs_for_blocks.gcs_in_out import GCSforBlocksOneInOneOut
 from gcs_for_blocks.gcs_exp import GCSforBlocksExp
+from gcs_for_blocks.gcs_split_move import GCSforBlocksSplitMove
 from gcs_for_blocks.gcs_options import GCSforBlocksOptions
 from gcs_for_blocks.util import INFO, WARN
 
@@ -76,6 +77,7 @@ def make_simple_transparent_gcs_test(
     block_dim: int,
     num_blocks: int,
     horizon: int,
+    constructor = GCSforBlocks,
     use_convex_relaxation: bool = True,
     max_rounded_paths: int = 100,
     display_graph: bool = False,
@@ -98,7 +100,7 @@ def make_simple_transparent_gcs_test(
     else:
         WARN("MIXED INTEGER")
 
-    gcs = GCSforBlocks(options)
+    gcs = constructor(options)
 
     width = 1
     scaling = 0.5
@@ -226,12 +228,47 @@ if __name__ == "__main__":
     # h = 19
     # nb = 7
     # h = 19
+    dim = 1
     nb = 5
-    h = 11
-    seed = 5
-    gcs,_,_=make_simple_transparent_gcs_test(2, nb, h, graph_name = "cr_5_11", use_convex_relaxation=True, display_graph=False, max_rounded_paths=0, add_grasp_cost=False, randomize=False, seed=seed)
-    gcs,_,_=make_simple_transparent_gcs_test(2, nb, h, graph_name = "micp_5_11", use_convex_relaxation=False, display_graph=False, max_rounded_paths=0, add_grasp_cost = False, randomize=False, seed=seed)
-    gcs.get_solution_path()
+    h = 3
+    seed = 4
+    plots = True
+    randomize=False
+
+    start = np.array([0, 76, 11, 13, 24, 67])
+    end =   np.array([75,  3, 70, 71, 70, 75])
+    ub = 500
+
+    moving_shit = np.sum(np.abs(end[1:]-start[1:]))
+    i_am_at = start[0] + np.sum((end[1:]-start[1:]))
+    moving_myself = np.abs((end[0]-i_am_at))
+    print(moving_shit+moving_myself)
+
+
+
+    lb = 0
+    delta = 0
+    pay = 0
+    # displacement vector
+    dis = end[1:]-start[1:]
+    # total negative, positive diplacement
+    neg_dis = sum([i for i in dis if i < 0])
+    pos_dis = sum([i for i in dis if i > 0])
+    # violation of constraints by displacement
+    lbv = abs(min(0, start[0] + neg_dis - lb))
+    ubv = max(0,start[0] + pos_dis-ub)
+    # if any violated -- must adjust
+    # possibly must perform multiple moves
+    delta = neg_dis+pos_dis + lbv -ubv
+    pay = abs(neg_dis)+pos_dis + lbv +ubv
+    pay += abs(end[0]-(start[0] + delta)) 
+    print(pay)
+    
+    # gcs,_,_=make_simple_transparent_gcs_test(dim, nb, h, constructor = GCSforBlocks, graph_name = "og_micp", use_convex_relaxation=False, start_state=start, target_state=end, ubf = ub, display_graph=plots, max_rounded_paths=0, add_grasp_cost=False, randomize=randomize, seed=seed)
+    gcs,_,_=make_simple_transparent_gcs_test(dim, nb, h, constructor = GCSforBlocks, graph_name = "og12", use_convex_relaxation=True, start_state=start, target_state=end, ubf = ub, display_graph=plots, max_rounded_paths=0, add_grasp_cost=False, randomize=randomize, seed=seed)
+    # gcs,_,_=make_simple_transparent_gcs_test(dim, nb, h, constructor = GCSforBlocksSplitMove, graph_name = "exp5", use_convex_relaxation=True, start_state=start, target_state=end, ubf = ub, display_graph=plots, max_rounded_paths=0, add_grasp_cost=False, randomize=randomize, seed=seed)
+    # gcs,_,_=make_simple_transparent_gcs_test(2, nb, h, graph_name = "micp_"+str(nb)+"_"+str(h), use_convex_relaxation=False, display_graph=False, max_rounded_paths=0, add_grasp_cost = False, randomize=False, seed=seed)
+    # gcs.get_solution_path()
     # make_simple_obstacle_swap_two(use_convex_relaxation=True, max_rounded_paths=0)
     # make_simple_obstacle_swap_two(use_convex_relaxation=False, max_rounded_paths=0)
 

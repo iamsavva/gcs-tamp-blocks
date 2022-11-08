@@ -83,6 +83,7 @@ def make_simple_transparent_gcs_test(
     add_grasp_cost = True,
     randomize=False,
     seed = 0,
+    graph_name = "temp",
 ) -> T.Tuple[GCSforBlocks, npt.NDArray, T.List]:
     options = GCSforBlocksOptions(
         block_dim=block_dim, num_blocks=num_blocks, horizon=horizon
@@ -122,14 +123,15 @@ def make_simple_transparent_gcs_test(
     if target_state is not None:
         final_point = Point(np.array(target_state))
     else:
-        np.random.seed(seed)
+        np.random.seed(seed)    
         # make final state
         target_state = []
         for i in range(options.num_modes):
             block_state = [ub_float] * options.block_dim
+            # block_state[0] = scaling * width * (2 * i )  # type: ignore
+            block_state[0] = ub_float - scaling * width * (2 * i )
             if randomize:
-                block_state = list(np.random.rand(block_dim) * ub_float)
-            # block_state[0] = ub_float - scaling * width * (2 * i )
+                block_state = list(np.random.uniform(0, ub_float, block_dim))
             target_state += block_state
         final_point = Point(np.array(target_state))
     gcs.build_the_graph(initial_point, 0, final_point, 0)
@@ -139,7 +141,7 @@ def make_simple_transparent_gcs_test(
     if gcs.solution.is_success() and (max_rounded_paths > 0 or use_convex_relaxation == False): 
         gcs.verbose_solution_description()
     if display_graph:
-        gcs.display_graph()
+        gcs.display_graph(graph_name)
     return gcs, ub, target_state
 
 def make_simple_exp(
@@ -160,7 +162,6 @@ def make_simple_exp(
     options.problem_complexity = "transparent-no-obstacles"
 
     gcs = GCSforBlocksExp(options)
-
     width = 1
     scaling = 0.5
     if ubf is not None:
@@ -190,7 +191,7 @@ def make_simple_exp(
             block_state = [ub_float] * options.block_dim
             block_state[0] = ub_float - scaling * width * (2 * i )
             if randomize:
-                block_state = list(np.random.rand(block_dim) * ub_float)
+                block_state = list(np.random.uniform(0, ub_float, block_dim))
             target_state += block_state
         final_point = Point(np.array(target_state))
 
@@ -221,13 +222,16 @@ if __name__ == "__main__":
     # make_some_simple_transparent_tests()
     # make_simple_obstacle_swap_two(use_convex_relaxation=True, max_rounded_paths=0)
 
-    # nb = 9
+    # nb = 9 # 100x difference in solve time, tiny diff in cost: 78 vs 80.6
     # h = 19
-    nb = 7
-    h = 15
-    seed = 4
-    make_simple_transparent_gcs_test(2,nb,h, use_convex_relaxation=True, display_graph=True, max_rounded_paths=0, add_grasp_cost = False, randomize=True, seed=seed)
-    make_simple_transparent_gcs_test(2,nb,h, use_convex_relaxation=False, display_graph=False, max_rounded_paths=0, add_grasp_cost = False, randomize=True, seed=seed)
+    # nb = 7
+    # h = 19
+    nb = 5
+    h = 11
+    seed = 5
+    gcs,_,_=make_simple_transparent_gcs_test(2, nb, h, graph_name = "cr_5_11", use_convex_relaxation=True, display_graph=False, max_rounded_paths=0, add_grasp_cost=False, randomize=False, seed=seed)
+    gcs,_,_=make_simple_transparent_gcs_test(2, nb, h, graph_name = "micp_5_11", use_convex_relaxation=False, display_graph=False, max_rounded_paths=0, add_grasp_cost = False, randomize=False, seed=seed)
+    gcs.get_solution_path()
     # make_simple_obstacle_swap_two(use_convex_relaxation=True, max_rounded_paths=0)
     # make_simple_obstacle_swap_two(use_convex_relaxation=False, max_rounded_paths=0)
 

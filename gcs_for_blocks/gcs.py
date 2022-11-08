@@ -199,8 +199,8 @@ class GCSforBlocks:
         )
         names_of_sets_with_target = []
         # at each horizon level, only sets that contain the target can transition into target
-        for layer in range(self.opt.horizon):
-        # for layer in (self.opt.horizon-1,):
+        # for layer in range(self.opt.horizon):
+        for layer in (self.opt.horizon-1,):
             # if that layer has a target mode
             if self.target_mode in self.modes_per_layer[layer]:
                 # for each set that contains the target
@@ -741,22 +741,23 @@ class GCSforBlocks:
         target_vertex = self.name_to_vertex["target"].id()
         options = opt.GraphOfConvexSetsOptions()
         options.convex_relaxation = use_convex_relaxation
-        if use_convex_relaxation is True:
-            options.preprocessing = True  # TODO Do I need to deal with this?
+        options.preprocessing = False  # TODO Do I need to deal with this?
+        if use_convex_relaxation:
+            options.preprocessing = False  # TODO Do I need to deal with this?
             options.max_rounded_paths = max_rounded_paths
         INFO("Solving...")
         start = time.time()
         self.solution = self.gcs.SolveShortestPath(start_vertex, target_vertex, options)
         if self.solution.is_success():
             YAY("Solving GCS took %.2f seconds" % (time.time() - start))
-            YAY("Optimal cost is %.1f" % self.solution.get_optimal_cost())
+            YAY("Optimal cost is %.5f" % self.solution.get_optimal_cost())
         else:
             ERROR("SOLVE FAILED!")
             ERROR("Solving GCS took %.2f seconds" % (time.time() - start))
         if show_graph:
             self.display_graph()
 
-    def display_graph(self) -> None:
+    def display_graph(self, graph_name = "temp") -> None:
         """Visually inspect the graph. If solution acquired -- also displays the solution."""
         assert self.graph_built, "Must build graph first!"
         if self.solution.is_success():
@@ -764,7 +765,7 @@ class GCSforBlocks:
         else:
             graphviz = self.gcs.GetGraphvizString()
         data = pydot.graph_from_dot_data(graphviz)[0]  # type: ignore
-        data.write_svg("temp.svg")
+        data.write_png(graph_name + ".png")
 
         plt = Image(data.create_png())
         display(plt)
@@ -793,6 +794,21 @@ class GCSforBlocks:
         # find edges with non-zero flow
         flow_variables = [e.phi() for e in self.gcs.Edges()]
         flow_results = [self.solution.GetSolution(p) for p in flow_variables]
+
+        # if not tight -- return just the 0 mode values
+        not_tight = np.any(np.logical_and(0.05 < np.array(flow_results), np.array(flow_results)<0.95))
+        if not_tight:
+            modes = []
+            vertex_values = []
+            for i in range(0, self.opt.horizon+1, 2):
+                name = self.get_vertex_name(i, 0)
+                vertex_values += [self.solution.GetSolution( self.name_to_vertex[name].x() )]
+                modes += [0]
+            vertex_values += [self.solution.GetSolution(self.name_to_vertex["target"].x())]
+            modes += [0]
+            vertex_values = np.array(vertex_values)
+            return modes, vertex_values
+
         active_edges = [
             edge for edge, flow in zip(self.gcs.Edges(), flow_results) if flow >= 0.99
         ]

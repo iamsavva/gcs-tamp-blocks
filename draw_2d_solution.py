@@ -26,7 +26,7 @@ ARM_NOT_EMPTY_COLOR = "#5E3886"  # 5E3886 621940
 TEXT_COLOR = "#0B032D"
 BLACK = "#0B032D"
 BACKGROUND = "#F5E9E2"
-CELL_WIDTH = 30
+CELL_WIDTH = 50
 
 
 class Draw2DSolution:
@@ -55,7 +55,7 @@ class Draw2DSolution:
             self.speed = 10  # units/s
             self.grasp_dt = 0.3  # s
         else:
-            self.speed = 2  # units/s
+            self.speed = 1  # units/s
             self.grasp_dt = 0.7  # s
 
         self.move_dt = 0.025  # s
@@ -96,7 +96,7 @@ class Draw2DSolution:
             self.grasping = False
         # draw initial state
         self.draw_state(state_now)
-        time.sleep(5.0)
+        time.sleep(1.0)
 
         for i in range(1, len(vertex)):
             state_next = vertex[i, :]  # type: ignore
@@ -114,6 +114,7 @@ class Draw2DSolution:
                 self.grasp(state_next)
             mode_now = mode_next
             state_now = state_next
+            time.sleep(1.0)
 
     def move_from_to(self, state_now, state_next):
         delta = state_next - state_now
@@ -255,7 +256,12 @@ if __name__ == "__main__":
 
     # gcs, ub, goal = make_simple_transparent_gcs_test(2, 7, 18)
 
-    gcs, ub, goal = make_simple_transparent_gcs_test(2,10,21, use_convex_relaxation=False, display_graph=False, max_rounded_paths=0, add_grasp_cost = False)
+    # gcs, ub, goal = make_simple_transparent_gcs_test(2,10,21, use_convex_relaxation=False, display_graph=False, max_rounded_paths=0, add_grasp_cost = False)
+
+    nb = 5
+    h = 11
+    seed = 5
+    gcs, ub, goal = make_simple_transparent_gcs_test(2, nb, h, use_convex_relaxation=True, display_graph=False, max_rounded_paths=0, add_grasp_cost=False, randomize=False, seed=seed)
 
     assert gcs.solution.is_success(), "Solution was not found"
     modes, vertices = gcs.get_solution_path()
@@ -265,7 +271,7 @@ if __name__ == "__main__":
     print(modes)
     print(vertices)
 
-    drawer = Draw2DSolution(gcs.opt.num_modes, ub, modes, vertices, goal, fast=True)  # type: ignore
+    drawer = Draw2DSolution(gcs.opt.num_modes, ub, modes, vertices, goal, fast=False)  # type: ignore
     drawer.draw_solution()
 
     # make_some_simple_transparent_tests()

@@ -1,3 +1,7 @@
+import typing as T
+import numpy.typing as npt
+import numpy as np
+
 class EdgeOptExp:
     """
     Option class for edge connectivity.
@@ -96,7 +100,6 @@ class EdgeOptions:
     def equality_edge() -> "EdgeOptions":
         return EdgeOptions(False, False, True, False, False)
 
-
 class GCSforBlocksOptions:
     """
     Option class for GCSforBlocks.
@@ -152,7 +155,7 @@ class GCSforBlocksOptions:
         Dimension of the state x optimized at each vertex.
         (number of blocks + gripper) x (dimension of the world)
         """
-        return (self.num_blocks + 1) * self.block_dim
+        return self.num_modes * self.block_dim
 
     def __init__(
         self,
@@ -168,6 +171,10 @@ class GCSforBlocksOptions:
         use_convex_relaxation: bool = True,
         connect_source_target_to_single_set: bool = True,
         in_and_out_through_a_single_node: bool = False,
+        lb: T.List = None,
+        ub: T.List = None,
+        lbf: int = None,
+        ubf: int = None,
     ):
         assert problem_complexity in ("transparent-no-obstacles", "obstacles")
         self.block_dim = block_dim
@@ -183,3 +190,48 @@ class GCSforBlocksOptions:
         self.connect_source_target_to_single_set = connect_source_target_to_single_set
         self.in_and_out_through_a_single_node = in_and_out_through_a_single_node
         self.num_gcs_sets = -1
+
+        if lb is not None:
+            assert len(lb) == self.block_dim, "Dimension for lower bound constructor must be block_dim"
+            self.lb = np.tile(lb, self.num_modes)
+        elif lbf is not None:
+            self.lb = np.ones(self.state_dim) * lbf
+        else:
+            self.lb = np.zeros(self.state_dim)
+
+        if ub is not None:
+            assert len(ub) == self.block_dim, "Dimension for upper bound constructor must be block_dim"
+            self.ub = np.tile(ub, self.num_modes)
+        elif ubf is not None:
+            self.ub = np.ones(self.state_dim) * ubf
+        else:
+            self.ub = np.ones(self.state_dim) * 10.0
+
+class GCSforAutonomousBlocksOptions(GCSforBlocksOptions):
+
+    dirs = ["A", "B", "L", "R"]
+
+    def inv(self, dir : str):
+        if dir == "A": return "B"
+        if dir == "B": return "A"
+        if dir == "L": return "R"
+        if dir == "R": return "L"
+
+    @property 
+    def num_dirs(self) -> int:
+        return len(self.dirs)
+
+    @property 
+    def set_spec_len(self) -> int:
+        return int((self.num_blocks-1) * self.num_blocks/2)
+
+    
+
+    @property
+    def num_modes(self) -> int:
+        """
+        Number of modes. For the case with no pushing, we have 1 mode for free motion and a mode
+        per block for when grasping that block.
+        The case with pushing will have many more modes; not implemented.
+        """
+        return self.num_blocks

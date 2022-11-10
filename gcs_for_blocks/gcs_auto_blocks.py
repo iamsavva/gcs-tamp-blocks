@@ -29,48 +29,13 @@ from pydrake.solvers import (  # pylint: disable=import-error, unused-import
 from .util import ERROR, WARN, INFO, YAY
 from .gcs_options import GCSforBlocksOptions, EdgeOptions
 from .gcs_set_generator import GCSsetGenerator
+from .gcs import GCSforBlocks
 
 
-class GCSforBlocks:
+class GCSAutonomousBlocks(GCSforBlocks):
     """
     GCS for N-dimensional block moving using a top-down suction cup.
     """
-
-    ###################################################################################
-    # Properties, inits, setter functions
-
-    def __init__(self, options: GCSforBlocksOptions):
-        # options
-        self.opt = options
-
-        # init the graph
-        self.gcs = GraphOfConvexSets()
-        self.graph_built = False
-
-        self.set_gen = GCSsetGenerator(options)
-
-        # the following structures hold information about the graph connectivity.
-
-        # name to vertex dictionary, populated as we populate the graph with vertices
-        self.name_to_vertex = dict()  # T.Dict[str, GraphOfConvexSets.Vertex]
-
-        # below structures are used for hand-built graph edge information.
-        # see populate_important_things()
-        # set ids located in a mode
-        self.sets_per_mode = dict()  # T.Dict[int, T.Set[int]]
-        # modes that are represented in a layer (horizon step)
-        self.modes_per_layer = dict()  # T.Dict[int, T.Set[int]]
-        # set_ids that are represented ina  layer (horizon step)
-        self.sets_per_layer = dict()  # T.Dict[int, T.Set[int]]
-        # edges matrix for a mode graph
-        self.mode_graph_edges = np.empty([])  # np.NDArray, size num_modes x num_modes
-        # edge matrix for a set graph
-        self.set_graph_edges = np.array(
-            []
-        )  # np.NDArray, size num_gcs_sets x num_gcs_sets
-        # get polyhedron that describes a set
-        self.set_id_to_polyhedron = dict()  # T.Dict[int, HPolyhedron]
-        self.opt.num_gcs_sets = -1  # int, numer of GCS sets.
 
     ###################################################################################
     # Building the finite horizon GCS
@@ -78,9 +43,7 @@ class GCSforBlocks:
     def build_the_graph(
         self,
         start_state: Point,
-        start_mode: int,
         target_state: Point,
-        target_mode: int,
     ) -> None:
         """
         Build the GCS graph of horizon H from start to target nodes.
@@ -90,11 +53,23 @@ class GCSforBlocks:
         # reset the graph
         self.gcs = GraphOfConvexSets()
         self.graph_built = False
-        self.start_mode = start_mode
-        self.target_mode = target_mode
 
-        # hand-built pre-processing of the graph
-        self.populate_important_things()
+        # assumption: start / target are specified points
+    
+        # construct sets
+
+        # figure out edge connectivity
+
+        # construct graph
+
+        # figure out what set start / target are in
+
+        # connect s to start set with equality edge
+        # connect t to target set with move edge
+
+        # solve
+
+        
 
         # add all vertices
         self.add_all_vertices(start_state, target_state)
@@ -670,9 +645,9 @@ class GCSforBlocks:
     ###################################################################################
     # Vertex and edge naming
 
-    def get_vertex_name(self, layer: int, set_id: int, t = "") -> str:
+    def get_vertex_name(self, layer: int, set_id: int) -> str:
         """Naming convention is: M_<layer>_<set_id> for regular nodes"""
-        return t+"M_" + str(layer) + "_" + str(set_id)
+        return "M_" + str(layer) + "_" + str(set_id)
 
     def get_set_id_from_vertex_name(self, name: str) -> int:
         assert name not in ("start", "target"), "Trying to get set id for bad sets!"
@@ -700,7 +675,6 @@ class GCSforBlocks:
             return "Move f, grasp " + str(right_mode) + " at " + str(layer)
         else:
             return "Move g, ungrasp " + str(left_mode) + " at " + str(layer)
-        # return "E: " + left_vertex_name + " -> " + right_vertex_name
 
     def set_names_for_layer(self, set_ids, layer):
         return [self.get_vertex_name(layer, set_id) for set_id in set_ids]

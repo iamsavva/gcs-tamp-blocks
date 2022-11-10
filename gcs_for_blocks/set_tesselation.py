@@ -3,47 +3,36 @@ import typing as T
 
 import time
 import numpy as np
+import numpy.typing as npt
 
 from pydrake.geometry.optimization import (  # pylint: disable=import-error
     HPolyhedron,
     Iris,
 )
+
 from pydrake.common import RandomGenerator  # pylint: disable=import-error
 
-# from .util import WARN, INFO
+from .gcs_options import GCSforAutonomousBlocksOptions
+from .util import WARN, INFO, all_possible_combinations_of_items
 
-NUM_DIRS = 4
-LETTERS = ["A", "B", "L", "R"]
-BLOCK_DIM = 2
-BLOCK_WIDTH = 1.0
 
-def inv(letter):
-    if letter == "A": return "B"
-    if letter == "B": return "A"
-    if letter == "L": return "R"
-    if letter == "R": return "L"
 
-def all_possible_combinations_of_items(item_set, num_items):
-    if num_items == 0:
-        return [""]
-    result = []
-    possible_n_1 = all_possible_combinations_of_items(item_set, num_items-1)
-    for item in item_set:
-        result += [ item + x for x in possible_n_1 ]
-    return result
-    
+class SetTesselation:
+    def __init__(self, options: GCSforAutonomousBlocksOptions):
+        self.opt = options
+        self.sets_in_dir_representation = self.get_sets_in_dir_representation()
 
-def all_letter_combinations(n:int):
-    num_letters_to_define_a_set = n * (n-1) / 2
-    return all_possible_combinations_of_items(LETTERS, num_letters_to_define_a_set)
+    def get_sets_in_dir_representation(self):
+        return all_possible_combinations_of_items(self.opt.dirs, self.opt.set_spec_len)
 
-def get_constraint_for_direction(dir, num_blocks):
-    state_dim = num_blocks * BLOCK_DIM
-    A, b = [], 1
-    return A, b
-    # A = []
-    # b = []
-    # if dir == "A":
+    def get_constraints_for_direction(self, dir):
+        A, b = [], 1
+        return A, b
+
+    def add_bounding_box_constraint(self) -> T.Tuple[npt.NDArray, npt.NDArray]:
+        A = np.vstack((np.eye(self.opt.state_dim), -np.eye(self.opt.state_dim)))
+        b = np.hstack((self.opt.ub, -self.opt.lb))
+        return A, b
 
 
 
@@ -57,8 +46,6 @@ def get_set_from_letters(letters, num_blocks):
         A += [A_i]
         b += [b_i]
     return np.array(A), np.array(b)
-        
-        
 
 
 

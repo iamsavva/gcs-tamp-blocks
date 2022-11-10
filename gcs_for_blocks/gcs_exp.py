@@ -4,25 +4,20 @@ import typing as T
 import numpy as np
 import numpy.typing as npt
 
-import pydrake.geometry.optimization as opt  # pylint: disable=import-error
 from pydrake.geometry.optimization import (  # pylint: disable=import-error
     Point,
     GraphOfConvexSets,
-    HPolyhedron,
-    ConvexSet,
 )
 from pydrake.solvers import (  # pylint: disable=import-error, unused-import
     Binding,
     L2NormCost,
-    LinearConstraint,
-    LinearEqualityConstraint,
     LinearCost,
 )
 from pydrake.math import eq # pylint: disable=import-error
 
 
 from .util import ERROR, WARN, INFO, YAY
-from .gcs_options import GCSforBlocksOptions, EdgeOptions, EdgeOptExp
+from .gcs_options import  EdgeOptExp
 from .gcs import GCSforBlocks
 
 

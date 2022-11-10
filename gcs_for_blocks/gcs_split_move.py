@@ -1,36 +1,12 @@
 # pyright: reportMissingImports=false
 import typing as T
 
-import numpy as np
-import numpy.typing as npt
-
-import pydot
-from tqdm import tqdm
-from IPython.display import Image, display
-import time
-
-# from PIL import Image as PIL_Image
-
-import pydrake.geometry.optimization as opt  # pylint: disable=import-error
 from pydrake.geometry.optimization import (  # pylint: disable=import-error
     Point,
-    GraphOfConvexSets,
-    HPolyhedron,
-    ConvexSet,
-)
-from pydrake.solvers import (  # pylint: disable=import-error, unused-import
-    Binding,
-    L2NormCost,
-    LinearConstraint,
-    LinearEqualityConstraint,
-    LinearCost,
 )
 
-from .util import ERROR, WARN, INFO, YAY
-from .gcs_options import GCSforBlocksOptions, EdgeOptions
-from .gcs_set_generator import GCSsetGenerator
+from .gcs_options import EdgeOptions
 from .gcs import GCSforBlocks
-
 
 class GCSforBlocksSplitMove(GCSforBlocks):
     """
@@ -156,101 +132,4 @@ class GCSforBlocksSplitMove(GCSforBlocks):
 
     def get_vertex_name(self, layer: int, set_id: int, t = "M") -> str:
         """Naming convention is: M_<layer>_<set_id> for regular nodes"""
-        return t+"_" + str(layer) + "_" + str(set_id)
-
-    def get_set_id_from_vertex_name(self, name: str) -> int:
-        assert name not in ("start", "target"), "Trying to get set id for bad sets!"
-        set_id = int(name.split("_")[-1])
-        return set_id
-
-    def get_mode_from_vertex_name(self, name: str) -> int:
-        if name == "start":
-            return self.start_mode
-        if name == "target":
-            return self.target_mode
-        set_id = self.get_set_id_from_vertex_name(name)
-        return self.get_mode_from_set_id(set_id)
-
-    def get_edge_name(self, left_vertex_name: str, right_vertex_name: str) -> str:
-        if right_vertex_name == "target":
-            layer = int(left_vertex_name.split("_")[-2])
-            return "Move f to target at " +  str(layer)
-        if left_vertex_name == "start":
-            return "Equals start"
-        layer = int(left_vertex_name.split("_")[-2])
-        left_mode = self.get_mode_from_vertex_name(left_vertex_name)
-        right_mode = self.get_mode_from_vertex_name(right_vertex_name)
-        if left_mode in ('0', 0):
-            return "Move f, grasp " + str(right_mode) + " at " + str(layer)
-        else:
-            return "Move g, ungrasp " + str(left_mode) + " at " + str(layer)
-        # return "E: " + left_vertex_name + " -> " + right_vertex_name
-
-    def set_names_for_layer(self, set_ids, layer):
-        return [self.get_vertex_name(layer, set_id) for set_id in set_ids]
-
-
-
-    def get_solution_path(self) -> T.Tuple[T.List[str], npt.NDArray]:
-        """Given a solved GCS problem, and assuming it's tight, find a path from start to target"""
-        assert self.graph_built, "Must build graph first!"
-        assert self.solution.is_success(), "Solution was not found"
-        # find edges with non-zero flow
-        flow_variables = [e.phi() for e in self.gcs.Edges()]
-        flow_results = [self.solution.GetSolution(p) for p in flow_variables]
-
-        # if not tight -- return just the 0 mode values
-        not_tight = np.any(np.logical_and(0.05 < np.array(flow_results), np.array(flow_results)<0.95))
-        if not_tight:
-            modes = []
-            vertex_values = []
-            for i in range(0, self.opt.horizon+1, 2):
-                name = self.get_vertex_name(i, 0)
-                vertex_values += [self.solution.GetSolution( self.name_to_vertex[name].x() )]
-                modes += [0]
-            vertex_values += [self.solution.GetSolution(self.name_to_vertex["target"].x())]
-            modes += [0]
-            vertex_values = np.array(vertex_values)
-            return modes, vertex_values
-
-        active_edges = [
-            edge for edge, flow in zip(self.gcs.Edges(), flow_results) if flow >= 0.99
-        ]
-        # using these edges, find the path from start to target
-        path = self.find_path_to_target(active_edges, self.name_to_vertex["start"])
-        modes = [v.name() for v in path]
-        modes = [
-            str(self.get_mode_from_vertex_name(mode))
-            if mode not in ("start", "target")
-            else mode
-            for mode in modes
-        ]
-        vertex_values = np.vstack([self.solution.GetSolution(v.x()) for v in path])
-        return modes, vertex_values
-
-    def verbose_solution_description(self) -> None:
-        """Describe the solution in text: grasp X, move to Y, ungrasp Z"""
-        assert self.solution.is_success(), "Solution was not found"
-        modes, vertices = self.get_solution_path()
-        for i in range(len(vertices)):
-            vertices[i] = ["%.2f" % v for v in vertices[i]]
-        mode_now = modes[1]
-        INFO("-----------------------")
-        INFO("Solution is:")
-        INFO("-----------------------")
-        for i in range(len(modes)):  # pylint: disable=consider-using-enumerate
-            sg = vertices[i][0 : self.opt.block_dim]
-            if modes[i] == "start":
-                INFO("Start at", sg)
-            elif modes[i] == "target":
-                INFO("Move to", sg, "; Finish")
-            else:
-                mode_next = modes[i]
-                if mode_next == mode_now:
-                    grasp = ""
-                elif mode_next == "0":
-                    grasp = "Ungrasp block " + str(mode_now)
-                else:
-                    grasp = "Grasp block " + str(mode_next)
-                mode_now = mode_next
-                INFO("Move to", sg, "; " + grasp)
+        return t + "_" + str(layer) + "_" + str(set_id)

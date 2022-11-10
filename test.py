@@ -17,16 +17,12 @@ def make_simple_obstacle_swap_two_in_out(
 ) -> T.Tuple[GCSforBlocksOneInOneOut, npt.NDArray, T.List]:
     INFO("--------------------------")
     INFO("Test case: 2D, Obstacles, 2 blocks IN OUT\n")
-    options = GCSforBlocksOptions(num_blocks=2, block_dim=2, horizon=10)
+    options = GCSforBlocksOptions(num_blocks=2, block_dim=2, horizon=10, lbf = 0, ubf = 2)
     options.problem_complexity = "obstacles"
     options.use_convex_relaxation = use_convex_relaxation
     options.max_rounded_paths = max_rounded_paths
-
+    options.block_width = 1.0
     gcs = GCSforBlocksOneInOneOut(options)
-    width = 1.0
-    ub = np.array([2, 2])
-    gcs.set_block_width(width)
-    gcs.set_ub(ub)
 
     initial_state = [1, 0, 1, 1, 1, 2]
     initial_point = Point(np.array(initial_state))
@@ -39,25 +35,21 @@ def make_simple_obstacle_swap_two_in_out(
         gcs.verbose_solution_description()
     except:
         pass
-    return gcs, ub, final_state
-
+    return gcs, gcs.opt.ub, final_state
 
 def make_simple_obstacle_swap_two(
-    use_convex_relaxation: bool = False, max_rounded_paths: int = 100
+    use_convex_relaxation: bool = False, max_rounded_paths: int = 100, display_graph = False
 ) -> T.Tuple[GCSforBlocks, npt.NDArray, T.List]:
     INFO("--------------------------")
-    INFO("Test case: 2D, Obstacles, 2 blocks\n")
-    options = GCSforBlocksOptions(num_blocks=2, block_dim=2, horizon=10)
+    INFO("Test case: 2D, Obstacles, 2 blocks; MICP:", not use_convex_relaxation, "\n")
+    options = GCSforBlocksOptions(num_blocks=2, block_dim=2, horizon=9, lbf = 0, ubf = 2)
     options.problem_complexity = "obstacles"
     options.use_convex_relaxation = use_convex_relaxation
     options.max_rounded_paths = max_rounded_paths
     options.add_grasp_cost=False
+    options.block_width = 1.0
 
     gcs = GCSforBlocks(options)
-    width = 1.0
-    ub = np.array([2, 2])
-    gcs.set_block_width(width)
-    gcs.set_ub(ub)
 
     initial_state = [1, 0, 1, 1, 1, 2]
     initial_point = Point(np.array(initial_state))
@@ -70,8 +62,9 @@ def make_simple_obstacle_swap_two(
         gcs.verbose_solution_description()
     except:
         pass
-    return gcs, ub, final_state
-
+    if display_graph:
+        gcs.display_graph("temp")
+    return gcs, gcs.opt.ub, final_state
 
 def make_simple_transparent_gcs_test(
     block_dim: int,
@@ -87,13 +80,21 @@ def make_simple_transparent_gcs_test(
     seed = 0,
     graph_name = "temp",
 ) -> T.Tuple[GCSforBlocks, npt.NDArray, T.List]:
+    width = 1
+    scaling = 0.5
+    if ubf is not None:
+        ub_float = ubf
+    else:
+        ub_float = scaling * width * 2 * (num_blocks )
+
     options = GCSforBlocksOptions(
-        block_dim=block_dim, num_blocks=num_blocks, horizon=horizon
+        block_dim=block_dim, num_blocks=num_blocks, horizon=horizon, lbf = 0.0, ubf = ub_float
     )
     options.use_convex_relaxation = use_convex_relaxation
     options.max_rounded_paths = max_rounded_paths
     options.problem_complexity = "transparent-no-obstacles"
     options.add_grasp_cost = add_grasp_cost
+    options.block_width = width
 
     if use_convex_relaxation:
         WARN("CONVEX RELAXATION")
@@ -101,16 +102,6 @@ def make_simple_transparent_gcs_test(
         WARN("MIXED INTEGER")
 
     gcs = constructor(options)
-
-    width = 1
-    scaling = 0.5
-    if ubf is not None:
-        ub_float = ubf
-    else:
-        ub_float = scaling * width * 2 * (num_blocks )
-    ub = np.tile((np.array(ub_float)), block_dim)
-    gcs.set_block_width(width)
-    gcs.set_ub(ub)
 
     if start_state is not None:
         initial_point = Point(np.array(start_state))
@@ -144,7 +135,7 @@ def make_simple_transparent_gcs_test(
         gcs.verbose_solution_description()
     if display_graph:
         gcs.display_graph(graph_name)
-    return gcs, ub, target_state
+    return gcs, gcs.opt.ub, target_state
 
 def make_simple_exp(
     block_dim: int,
@@ -155,24 +146,20 @@ def make_simple_exp(
     display_graph: bool = False,
     start_state=None, target_state=None, ubf =None,randomize=False
 ) -> T.Tuple[GCSforBlocks, npt.NDArray, T.List]:
-
-    options = GCSforBlocksOptions(
-        block_dim=block_dim, num_blocks=num_blocks, horizon=horizon
-    )
-    options.use_convex_relaxation = use_convex_relaxation
-    options.max_rounded_paths = max_rounded_paths
-    options.problem_complexity = "transparent-no-obstacles"
-
-    gcs = GCSforBlocksExp(options)
     width = 1
     scaling = 0.5
     if ubf is not None:
         ub_float = ubf
     else:
-        ub_float = scaling * width * 2 * (num_blocks )
-    ub = np.tile((np.array(ub_float)), block_dim)
-    gcs.set_block_width(width)
-    gcs.set_ub(ub)
+        ub_float = scaling * width * 2 * (num_blocks)
+        
+    options = GCSforBlocksOptions(block_dim=block_dim, num_blocks=num_blocks, horizon=horizon, lbf = 0.0, ubf = ub_float)
+    options.use_convex_relaxation = use_convex_relaxation
+    options.max_rounded_paths = max_rounded_paths
+    options.problem_complexity = "transparent-no-obstacles"
+    options.block_width = width
+
+    gcs = GCSforBlocksExp(options)
 
     if start_state is not None:
         initial_point = Point(np.array(start_state))
@@ -215,19 +202,10 @@ def make_some_simple_transparent_tests():
     make_simple_transparent_gcs_test(2, 3, 7)
     INFO("--------------------------")
     INFO("Test case: 3D, 5 blocks\n")
-    make_simple_transparent_gcs_test(3, 5, 18)
+    make_simple_transparent_gcs_test(3, 5, 17)
 
 
 if __name__ == "__main__":
-    # make_simple_exp(1, 2, 5, max_rounded_paths=0)
-    # make_simple_obstacle_swap_two()
-    # make_some_simple_transparent_tests()
-    # make_simple_obstacle_swap_two(use_convex_relaxation=True, max_rounded_paths=0)
-
-    # nb = 9 # 100x difference in solve time, tiny diff in cost: 78 vs 80.6
-    # h = 19
-    # nb = 7
-    # h = 19
     dim = 1
     nb = 5
     h = 3

@@ -19,10 +19,8 @@ from .gcs_options import GCSforBlocksOptions
 
 
 class GCSsetGenerator:
-    def __init__(self, options: GCSforBlocksOptions, lb, ub):
+    def __init__(self, options: GCSforBlocksOptions):
         self.opt = options
-        self.lb = lb
-        self.ub = ub
 
     ###################################################################################
     # Orbital sets and constraints
@@ -91,8 +89,8 @@ class GCSsetGenerator:
         Returns this inequality in a form lb <= Ax <= ub.
         """
         A = np.eye(self.opt.state_dim)
-        lb = self.lb
-        ub = self.ub
+        lb = self.opt.lb
+        ub = self.opt.ub
         return A, lb, ub
 
     def get_bounding_box_on_x_single_inequality(
@@ -166,7 +164,7 @@ class GCSsetGenerator:
             A = np.eye(state_dim)
             lb = np.zeros(state_dim)
             ub = np.ones(state_dim)
-            ub[0:self.opt.num_blocks * self.opt.block_dim] *= self.ub[0]
+            ub[0:self.opt.num_blocks * self.opt.block_dim] *= self.opt.ub[0]
 
             # single inequality form, bounding box on state
             A = np.vstack((A, -A))

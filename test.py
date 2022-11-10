@@ -222,8 +222,6 @@ if __name__ == "__main__":
     moving_myself = np.abs((end[0]-i_am_at))
     print(moving_shit+moving_myself)
 
-
-
     lb = 0
     delta = 0
     pay = 0

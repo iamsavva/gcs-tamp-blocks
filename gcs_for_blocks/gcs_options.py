@@ -48,6 +48,39 @@ class EdgeOptExp:
         return EdgeOptExp(False, False, False, True, False, False)
 
 
+class EdgeOptAB:
+    """
+    Option class for edge connectivity.
+    """
+    # right point belongs to same set as left point
+    add_set_transition_constraint = False
+    # right point equal to left point
+    add_equality_constraint = False
+    # L2 norm on gripper movement
+    add_each_block_movement_cost = False
+
+    def __init__(
+        self,
+        add_set_transition_constraint: bool,
+        add_equality_constraint: bool,
+        add_each_block_movement_cost: bool,
+    ):
+        self.add_set_transition_constraint = add_set_transition_constraint
+        self.add_equality_constraint = add_equality_constraint
+        self.add_each_block_movement_cost = add_each_block_movement_cost
+
+    @staticmethod
+    def move_edge() -> "EdgeOptAB":
+        return EdgeOptAB(True, False, True)
+
+    @staticmethod
+    def equality_edge() -> "EdgeOptAB":
+        return EdgeOptAB(False, True, False)
+
+    @staticmethod
+    def target_edge() -> "EdgeOptAB":
+        return EdgeOptAB(False, False, True)
+
 class EdgeOptions:
     """
     Option class for edge connectivity.
@@ -218,16 +251,16 @@ class GCSforBlocksOptions:
 class GCSforAutonomousBlocksOptions(GCSforBlocksOptions):
 
     dirs = ["A", "B", "L", "R"]
+    dir_inverse = {"A": "B", "B":"A", "L":"R", "R":"L"}
+    dir_iterator = {"A": "B", "B":"L", "L":"R", "R":"A"}
 
-    def inv(self, dir: str):
-        if dir == "A":
-            return "B"
-        if dir == "B":
-            return "A"
-        if dir == "L":
-            return "R"
-        if dir == "R":
-            return "L"
+    # @property
+    def dir_inv(self, letter) -> str:
+        return self.dir_inverse[letter]
+
+    # @property
+    def dir_iter(self, letter) -> str:
+        return self.dir_iterator[letter]
 
     @property
     def num_dirs(self) -> int:
@@ -245,3 +278,42 @@ class GCSforAutonomousBlocksOptions(GCSforBlocksOptions):
         The case with pushing will have many more modes; not implemented.
         """
         return self.num_blocks
+
+    def __init__(
+        self,
+        num_blocks: int,
+        block_width: float = 1.0,
+        max_rounded_paths: int = 40,
+        use_convex_relaxation: bool = True,
+        lb: T.List = None,
+        ub: T.List = None,
+        lbf: int = None,
+        ubf: int = None,
+    ):
+        self.block_dim = 2
+        self.horizon = -1
+        self.num_blocks = num_blocks
+        self.block_width = block_width
+        self.max_rounded_paths = max_rounded_paths
+        self.use_convex_relaxation = use_convex_relaxation
+        self.num_gcs_sets = -1
+
+        if lb is not None:
+            assert (
+                len(lb) == self.block_dim
+            ), "Dimension for lower bound constructor must be block_dim"
+            self.lb = np.tile(lb, self.num_modes)
+        elif lbf is not None:
+            self.lb = np.ones(self.state_dim) * lbf
+        else:
+            self.lb = np.zeros(self.state_dim)
+
+        if ub is not None:
+            assert (
+                len(ub) == self.block_dim
+            ), "Dimension for upper bound constructor must be block_dim"
+            self.ub = np.tile(ub, self.num_modes)
+        elif ubf is not None:
+            self.ub = np.ones(self.state_dim) * ubf
+        else:
+            self.ub = np.ones(self.state_dim) * 10.0

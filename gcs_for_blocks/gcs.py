@@ -26,9 +26,10 @@ from pydrake.solvers import (  # pylint: disable=import-error, unused-import
     LinearCost,
 )
 
-from .util import ERROR, WARN, INFO, YAY
+from .util import ERROR, WARN, INFO, YAY, timeit
 from .gcs_options import GCSforBlocksOptions, EdgeOptions
 from .gcs_set_generator import GCSsetGenerator
+
 
 
 class GCSforBlocks:
@@ -725,9 +726,9 @@ class GCSforBlocks:
         target_vertex = self.name_to_vertex["target"].id()
         options = opt.GraphOfConvexSetsOptions()
         options.convex_relaxation = use_convex_relaxation
-        options.preprocessing = False  # TODO Do I need to deal with this?
+        options.preprocessing = True  # TODO Do I need to deal with this?
         if use_convex_relaxation:
-            options.preprocessing = False  # TODO Do I need to deal with this?
+            options.preprocessing = True  # TODO Do I need to deal with this?
             options.max_rounded_paths = max_rounded_paths
         INFO("Solving...")
         start = time.time()

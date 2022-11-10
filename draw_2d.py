@@ -38,8 +38,9 @@ class Draw2DSolution:
         vertex_solution: T.List[T.List],
         goal,
         fast: bool = True,
-        just_two=False,
+        no_arm = False,
     ):
+        self.no_arm = no_arm
         self.num_modes = num_modes
         self.ub = ub
         self.cell_scaling = CELL_WIDTH
@@ -64,7 +65,6 @@ class Draw2DSolution:
 
         self.width = self.cell_scaling * self.ub + self.padding * 2 + self.border * 2
         self.goal = goal
-        self.just_two = just_two
 
         # tkinter initialization
         self.tk = Tk()
@@ -86,10 +86,23 @@ class Draw2DSolution:
             loc[1] * self.cell_scaling + self.padding + self.border,
         )
 
+    def draw_solution_no_arm(self):
+        vertex = self.vertex
+        state_now = vertex[0, :]  # type: ignore
+
+        # draw initial state
+        self.draw_state(state_now)
+        time.sleep(2.0)
+
+        for i in range(1, len(vertex)):
+            state_next = vertex[i, :]  # type: ignore
+            self.move_from_to(state_now, state_next)
+            state_now = state_next
+        time.sleep(2.0)
+
     def draw_solution(self):
         vertex = self.vertex
         mode = self.mode
-
         state_now = vertex[0, :]  # type: ignore
         mode_now = mode[1]
         if mode_now == "0":
@@ -117,8 +130,10 @@ class Draw2DSolution:
             time.sleep(1.0)
 
     def move_from_to(self, state_now, state_next):
-        delta = state_next - state_now
+        delta = state_next - state_now    
         distance = np.linalg.norm(delta[0:2])
+        if self.no_arm:
+            distance = np.linalg.norm(delta)
         distance_per_dt = self.speed * self.move_dt
         num_steps = int(max(float(distance / distance_per_dt), 1.0))
         for i in range(1, num_steps + 1):
@@ -133,10 +148,13 @@ class Draw2DSolution:
         self.clear()
         self.draw_background()
         self.draw_goal()
-        for i in range(1, self.num_modes):
-            self.draw_block(state[2 * i : 2 * i + 2], i)
-
-        self.draw_arm(state[0:2])
+        if self.no_arm:
+            for i in range(self.num_modes):
+                self.draw_block(state[2 * i : 2 * i + 2], i)
+        else:
+            for i in range(1, self.num_modes):
+                self.draw_block(state[2 * i : 2 * i + 2], i)
+            self.draw_arm(state[0:2])
         self.tk.update()
 
     def clear(self):
@@ -242,8 +260,9 @@ class Draw2DSolution:
         )
 
     def draw_goal(self):
-        if self.just_two:
-            self.draw_shadow(self.goal, "2")
+        if self.no_arm:
+            for i in range(self.num_modes):
+                self.draw_shadow(self.goal[2 * i : 2 * i + 2], i)
         else:
             self.draw_shadow(self.goal[0:2], "arm")
             for i in range(1, self.num_modes):

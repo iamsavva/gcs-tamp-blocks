@@ -1,6 +1,6 @@
 from colorama import Fore
 import typing as T
-
+import time
 
 def ERROR(*texts):
     print(Fore.RED + " ".join([str(text) for text in texts]))
@@ -29,3 +29,28 @@ def all_possible_combinations_of_items(item_set: T.List[str], num_items: int):
     for item in item_set:
         result += [item + x for x in possible_n_1]
     return result
+
+class timeit:
+    def __init__(self):
+        self.times = []
+        self.times.append(time.time())
+    
+    def dt(self, descriptor = None):
+        self.times.append(time.time())
+        if descriptor is None:
+            INFO("%.3fs since last time-check"%(self.times[-1]-self.times[-2]))
+        else:
+            INFO(descriptor + "took %.3fs"%(self.times[-1]-self.times[-2]))
+
+    def T(self, descriptor = None):
+        self.times.append(time.time())
+        if descriptor is None:
+            INFO("%.3fs since the start"%(self.times[-1]-self.times[0]))
+        else:
+            INFO(descriptor + "took %.3fs since the start"%(self.times[-1]-self.times[0]))
+        
+        
+    
+
+
+        

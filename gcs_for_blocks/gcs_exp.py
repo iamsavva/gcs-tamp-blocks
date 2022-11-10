@@ -13,11 +13,11 @@ from pydrake.solvers import (  # pylint: disable=import-error, unused-import
     L2NormCost,
     LinearCost,
 )
-from pydrake.math import eq # pylint: disable=import-error
+from pydrake.math import eq  # pylint: disable=import-error
 
 
 from .util import ERROR, WARN, INFO, YAY
-from .gcs_options import  EdgeOptExp
+from .gcs_options import EdgeOptExp
 from .gcs import GCSforBlocks
 
 
@@ -67,24 +67,22 @@ class GCSforBlocksExp(GCSforBlocks):
 
         free_set = self.set_gen.get_convex_set_experimental("free")
         grasp_set = self.set_gen.get_convex_set_experimental("grasping")
-        
+
         # add each horizon_point
         for i in range(self.opt.horizon):
             # if self.opt.split_move:
-            self.add_vertex(free_set, "F_" + str(i) )
-            self.add_vertex(free_set, "FM_" + str(i) )
-            self.add_vertex(grasp_set, "G_" + str(i) )
-            self.add_vertex(grasp_set, "GM_" + str(i) )
+            self.add_vertex(free_set, "F_" + str(i))
+            self.add_vertex(free_set, "FM_" + str(i))
+            self.add_vertex(grasp_set, "G_" + str(i))
+            self.add_vertex(grasp_set, "GM_" + str(i))
             # else:
             #     self.add_vertex(free_set, "F_" + str(i) )
             #     self.add_vertex(grasp_set, "G_" + str(i) )
-        self.add_vertex(free_set, "F_" + str(self.opt.horizon) )
-        self.add_vertex(free_set, "FM_" + str(self.opt.horizon) )
+        self.add_vertex(free_set, "F_" + str(self.opt.horizon))
+        self.add_vertex(free_set, "FM_" + str(self.opt.horizon))
 
         # add target vertex
         self.add_vertex(target_state, "target")
-
-
 
     def add_all_edges(self) -> None:
         # F -- FM -- G -- GM
@@ -94,35 +92,62 @@ class GCSforBlocksExp(GCSforBlocks):
 
         for j in range(self.opt.horizon):
             i = str(j)
-            i_1 = str(j+1)
+            i_1 = str(j + 1)
             # add transition constraint F_ to FM_
-            self.add_edge("F_"+i, "FM_"+i, 0, EdgeOptExp.move_edge(), "Move free at " + i)
+            self.add_edge(
+                "F_" + i, "FM_" + i, 0, EdgeOptExp.move_edge(), "Move free at " + i
+            )
 
             # add weird equality constraint FM_ to G_, per block
-            for block in range(1, self.opt.num_blocks+1):
-                self.add_edge("FM_"+i, "G_"+i, block, EdgeOptExp.grasp_edge(), "Grasp "+ str(block) + " at " + i)
+            for block in range(1, self.opt.num_blocks + 1):
+                self.add_edge(
+                    "FM_" + i,
+                    "G_" + i,
+                    block,
+                    EdgeOptExp.grasp_edge(),
+                    "Grasp " + str(block) + " at " + i,
+                )
 
             # add move constraint from G_ to GM_
-            self.add_edge("G_"+i, "GM_"+i, 1, EdgeOptExp.move_edge(), "Move block at " + i)
+            self.add_edge(
+                "G_" + i, "GM_" + i, 1, EdgeOptExp.move_edge(), "Move block at " + i
+            )
 
             # add weird equality constraint from GM to F, per block
-            for block in range(1, self.opt.num_blocks+1):
-                self.add_edge("GM_"+i, "F_"+i_1, block, EdgeOptExp.ungrasp_edge(), "Ungrasp "+ str(block) + " at " + i)
+            for block in range(1, self.opt.num_blocks + 1):
+                self.add_edge(
+                    "GM_" + i,
+                    "F_" + i_1,
+                    block,
+                    EdgeOptExp.ungrasp_edge(),
+                    "Ungrasp " + str(block) + " at " + i,
+                )
 
             # target: add equalities with FM_
             # if j >= self.opt.num_blocks-2:
-            self.add_edge("FM_"+i_1, "target", 0 , EdgeOptExp.equality_edge(), "Eq Target at " + i_1)
+            self.add_edge(
+                "FM_" + i_1,
+                "target",
+                0,
+                EdgeOptExp.equality_edge(),
+                "Eq Target at " + i_1,
+            )
 
-        self.add_edge("F_"+str(self.opt.horizon), "FM_"+str(self.opt.horizon), 0, EdgeOptExp.move_edge(), "Move free at " + str(self.opt.horizon))
-
+        self.add_edge(
+            "F_" + str(self.opt.horizon),
+            "FM_" + str(self.opt.horizon),
+            0,
+            EdgeOptExp.move_edge(),
+            "Move free at " + str(self.opt.horizon),
+        )
 
     def add_edge(
         self,
-        left_name:str,
-        right_name:str,
-        block:int,
+        left_name: str,
+        right_name: str,
+        block: int,
         edge_opt: EdgeOptExp,
-        edge_name = None
+        edge_name=None,
     ) -> None:
         """
         READY
@@ -132,7 +157,7 @@ class GCSforBlocksExp(GCSforBlocks):
         left_vertex = self.name_to_vertex[left_name]
         right_vertex = self.name_to_vertex[right_name]
         if edge_name is None:
-            edge_name = "E"+str(block) + "_" + left_name +"-->"+right_name
+            edge_name = "E" + str(block) + "_" + left_name + "-->" + right_name
         # self.get_edge_name(left_vertex.name(), right_vertex.name())
         edge = self.gcs.AddEdge(left_vertex, right_vertex, edge_name)
 
@@ -158,10 +183,9 @@ class GCSforBlocksExp(GCSforBlocks):
         if edge_opt.add_grasp_cost:
             self.add_grasp_cost_on_edge(edge)
 
-
     ###################################################################################
     # Adding constraints and cost terms
-    def add_orbital_constraint_experimental( self, edge: GraphOfConvexSets.Edge) -> None:
+    def add_orbital_constraint_experimental(self, edge: GraphOfConvexSets.Edge) -> None:
         xu, xv = edge.xu(), edge.xv()
         b = self.opt.block_dim
         constraints = eq(xu[b:], xv[b:])
@@ -174,45 +198,53 @@ class GCSforBlocksExp(GCSforBlocks):
         b = self.opt.block_dim
         constraints = np.array([])
         # left: location of block i is same as that of the arm (0)
-        constraints = np.append(constraints, eq(x[0:b], x[i*b:(i+1)*b]) )
+        constraints = np.append(constraints, eq(x[0:b], x[i * b : (i + 1) * b]))
         # same arm left = arm right
-        constraints = np.append(constraints, eq(x[0:b], y[0:b]) )
+        constraints = np.append(constraints, eq(x[0:b], y[0:b]))
         for j in range(1, i):
-            constraints = np.append(constraints, eq( x[j*b:(j+1)*b], y[j*b:(j+1)*b]) )
+            constraints = np.append(
+                constraints, eq(x[j * b : (j + 1) * b], y[j * b : (j + 1) * b])
+            )
         for j in range(i, self.opt.num_blocks):
-            constraints = np.append(constraints, eq( x[(j+1)*b:(j+2)*b], y[j*b:(j+1)*b]) )
-        
+            constraints = np.append(
+                constraints, eq(x[(j + 1) * b : (j + 2) * b], y[j * b : (j + 1) * b])
+            )
+
         for j in range(self.opt.num_blocks):
-            k = self.opt.block_dim*self.opt.num_blocks + j
-            if j+1 == i:
-                constraints = np.append(constraints, eq(y[k], 1.0) )
+            k = self.opt.block_dim * self.opt.num_blocks + j
+            if j + 1 == i:
+                constraints = np.append(constraints, eq(y[k], 1.0))
             else:
-                constraints = np.append(constraints, eq(y[k], 0.0) )
+                constraints = np.append(constraints, eq(y[k], 0.0))
         for c in constraints:
             edge.AddConstraint(c)
-        
+
     def add_ungrasp_constraint(self, edge, i):
         y, x = edge.xu(), edge.xv()
         b = self.opt.block_dim
         constraints = np.array([])
         # left: location of block i is same as that of the arm (0)
-        constraints = np.append(constraints, eq(x[0:b], x[i*b:(i+1)*b]) )
+        constraints = np.append(constraints, eq(x[0:b], x[i * b : (i + 1) * b]))
         # same arm left = arm right
-        constraints = np.append(constraints, eq(x[0:b], y[0:b]) )
+        constraints = np.append(constraints, eq(x[0:b], y[0:b]))
         for j in range(1, i):
-            constraints = np.append(constraints, eq( x[j*b:(j+1)*b], y[j*b:(j+1)*b]) )
+            constraints = np.append(
+                constraints, eq(x[j * b : (j + 1) * b], y[j * b : (j + 1) * b])
+            )
         for j in range(i, self.opt.num_blocks):
-            constraints = np.append(constraints, eq( x[(j+1)*b:(j+2)*b], y[j*b:(j+1)*b]) )
-        
+            constraints = np.append(
+                constraints, eq(x[(j + 1) * b : (j + 2) * b], y[j * b : (j + 1) * b])
+            )
+
         for j in range(self.opt.num_blocks):
-            k = self.opt.block_dim*self.opt.num_blocks + j
-            if j+1 == i:
-                constraints = np.append(constraints, eq(y[k], 1.0) )
+            k = self.opt.block_dim * self.opt.num_blocks + j
+            if j + 1 == i:
+                constraints = np.append(constraints, eq(y[k], 1.0))
             else:
-                constraints = np.append(constraints, eq(y[k], 0.0) )
+                constraints = np.append(constraints, eq(y[k], 0.0))
         for c in constraints:
             edge.AddConstraint(c)
-        
+
     def add_point_equality_constraint(self, edge: GraphOfConvexSets.Edge) -> None:
         xu, xv = edge.xu(), edge.xv()
         constraints = eq(xu, xv)
@@ -246,7 +278,6 @@ class GCSforBlocksExp(GCSforBlocks):
         b = self.opt.time_cost_weight * np.ones(1)
         cost = LinearCost(a, b)
         edge.AddCost(Binding[LinearCost](cost, edge.xv()))
-
 
     ###################################################################################
     # Solve and display solution

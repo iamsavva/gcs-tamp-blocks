@@ -8,10 +8,12 @@ from pydrake.geometry.optimization import (  # pylint: disable=import-error
 from .gcs_options import EdgeOptions
 from .gcs import GCSforBlocks
 
+
 class GCSforBlocksSplitMove(GCSforBlocks):
     """
     GCS for N-dimensional block moving using a top-down suction cup.
     """
+
     ###################################################################################
     # Adding layers of nodes (trellis diagram style)
 
@@ -28,7 +30,8 @@ class GCSforBlocksSplitMove(GCSforBlocks):
                 self.get_convex_set_for_set_id(set_id), self.get_vertex_name(0, set_id)
             )
             self.add_vertex(
-                self.get_convex_set_for_set_id(set_id), self.get_vertex_name(0, set_id,"T") 
+                self.get_convex_set_for_set_id(set_id),
+                self.get_vertex_name(0, set_id, "T"),
             )
         # add vertices into horizon 1 through last
         for layer in range(1, self.opt.horizon):
@@ -39,7 +42,7 @@ class GCSforBlocksSplitMove(GCSforBlocks):
                     convex_set = self.get_convex_set_for_set_id(set_id)
                     self.add_vertex(convex_set, vertex_name)
                     if mode == 0:
-                        self.add_vertex(convex_set, "T"+vertex_name[1:])
+                        self.add_vertex(convex_set, "T" + vertex_name[1:])
         # add target vertex
         self.add_vertex(target_state, "target")
 
@@ -59,7 +62,7 @@ class GCSforBlocksSplitMove(GCSforBlocks):
         )
         self.connect_to_vertex_on_the_left(
             names_of_sets_with_start,
-            "T"+names_of_sets_with_start[0][1:],
+            "T" + names_of_sets_with_start[0][1:],
             EdgeOptions.within_mode_edge(),
         )
 
@@ -79,11 +82,13 @@ class GCSforBlocksSplitMove(GCSforBlocks):
                             edges_in, layer - 1
                         )
                         if mode != 0:
-                            names_of_edges_in = ["T"+x[1:] for x in names_of_edges_in]
+                            names_of_edges_in = ["T" + x[1:] for x in names_of_edges_in]
                             self.connect_to_vertex_on_the_left(
                                 names_of_edges_in,
                                 vertex_name,
-                                EdgeOptions.mode_transition_edge(self.opt.add_grasp_cost),
+                                EdgeOptions.mode_transition_edge(
+                                    self.opt.add_grasp_cost
+                                ),
                             )
                         else:
                             self.connect_to_vertex_on_the_left(
@@ -93,7 +98,7 @@ class GCSforBlocksSplitMove(GCSforBlocks):
                             )
                             self.connect_to_vertex_on_the_left(
                                 [vertex_name],
-                                "T"+vertex_name[1:],
+                                "T" + vertex_name[1:],
                                 EdgeOptions.within_mode_edge(),
                             )
 
@@ -116,7 +121,7 @@ class GCSforBlocksSplitMove(GCSforBlocks):
         names_of_sets_with_target = []
         # at each horizon level, only sets that contain the target can transition into target
         # for layer in range(self.opt.horizon):
-        for layer in (self.opt.horizon-1,):
+        for layer in (self.opt.horizon - 1,):
             # if that layer has a target mode
             if self.target_mode in self.modes_per_layer[layer]:
                 # for each set that contains the target
@@ -130,6 +135,6 @@ class GCSforBlocksSplitMove(GCSforBlocks):
     ###################################################################################
     # Vertex and edge naming
 
-    def get_vertex_name(self, layer: int, set_id: int, t = "M") -> str:
+    def get_vertex_name(self, layer: int, set_id: int, t="M") -> str:
         """Naming convention is: M_<layer>_<set_id> for regular nodes"""
         return t + "_" + str(layer) + "_" + str(set_id)

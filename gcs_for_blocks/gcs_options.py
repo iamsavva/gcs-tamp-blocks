@@ -2,6 +2,7 @@ import typing as T
 import numpy.typing as npt
 import numpy as np
 
+
 class EdgeOptExp:
     """
     Option class for edge connectivity.
@@ -45,6 +46,7 @@ class EdgeOptExp:
     @staticmethod
     def equality_edge() -> "EdgeOptExp":
         return EdgeOptExp(False, False, False, True, False, False)
+
 
 class EdgeOptions:
     """
@@ -99,6 +101,7 @@ class EdgeOptions:
     @staticmethod
     def equality_edge() -> "EdgeOptions":
         return EdgeOptions(False, False, True, False, False)
+
 
 class GCSforBlocksOptions:
     """
@@ -192,7 +195,9 @@ class GCSforBlocksOptions:
         self.num_gcs_sets = -1
 
         if lb is not None:
-            assert len(lb) == self.block_dim, "Dimension for lower bound constructor must be block_dim"
+            assert (
+                len(lb) == self.block_dim
+            ), "Dimension for lower bound constructor must be block_dim"
             self.lb = np.tile(lb, self.num_modes)
         elif lbf is not None:
             self.lb = np.ones(self.state_dim) * lbf
@@ -200,32 +205,37 @@ class GCSforBlocksOptions:
             self.lb = np.zeros(self.state_dim)
 
         if ub is not None:
-            assert len(ub) == self.block_dim, "Dimension for upper bound constructor must be block_dim"
+            assert (
+                len(ub) == self.block_dim
+            ), "Dimension for upper bound constructor must be block_dim"
             self.ub = np.tile(ub, self.num_modes)
         elif ubf is not None:
             self.ub = np.ones(self.state_dim) * ubf
         else:
             self.ub = np.ones(self.state_dim) * 10.0
 
+
 class GCSforAutonomousBlocksOptions(GCSforBlocksOptions):
 
     dirs = ["A", "B", "L", "R"]
 
-    def inv(self, dir : str):
-        if dir == "A": return "B"
-        if dir == "B": return "A"
-        if dir == "L": return "R"
-        if dir == "R": return "L"
+    def inv(self, dir: str):
+        if dir == "A":
+            return "B"
+        if dir == "B":
+            return "A"
+        if dir == "L":
+            return "R"
+        if dir == "R":
+            return "L"
 
-    @property 
+    @property
     def num_dirs(self) -> int:
         return len(self.dirs)
 
-    @property 
+    @property
     def set_spec_len(self) -> int:
-        return int((self.num_blocks-1) * self.num_blocks/2)
-
-    
+        return int((self.num_blocks - 1) * self.num_blocks / 2)
 
     @property
     def num_modes(self) -> int:

@@ -261,7 +261,17 @@ if __name__ == "__main__":
     nb = 5
     h = 11
     seed = 5
-    gcs, ub, goal = make_simple_transparent_gcs_test(2, nb, h, use_convex_relaxation=True, display_graph=False, max_rounded_paths=0, add_grasp_cost=False, randomize=False, seed=seed)
+    gcs, ub, goal = make_simple_transparent_gcs_test(
+        2,
+        nb,
+        h,
+        use_convex_relaxation=True,
+        display_graph=False,
+        max_rounded_paths=0,
+        add_grasp_cost=False,
+        randomize=False,
+        seed=seed,
+    )
 
     assert gcs.solution.is_success(), "Solution was not found"
     modes, vertices = gcs.get_solution_path()

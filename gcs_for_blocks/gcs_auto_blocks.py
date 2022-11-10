@@ -55,7 +55,7 @@ class GCSAutonomousBlocks(GCSforBlocks):
         self.graph_built = False
 
         # assumption: start / target are specified points
-    
+
         # construct sets
 
         # figure out edge connectivity
@@ -68,8 +68,6 @@ class GCSAutonomousBlocks(GCSforBlocks):
         # connect t to target set with move edge
 
         # solve
-
-        
 
         # add all vertices
         self.add_all_vertices(start_state, target_state)
@@ -159,7 +157,7 @@ class GCSAutonomousBlocks(GCSforBlocks):
         names_of_sets_with_target = []
         # at each horizon level, only sets that contain the target can transition into target
         # for layer in range(self.opt.horizon):
-        for layer in (self.opt.horizon-1,):
+        for layer in (self.opt.horizon - 1,):
             # if that layer has a target mode
             if self.target_mode in self.modes_per_layer[layer]:
                 # for each set that contains the target
@@ -665,13 +663,13 @@ class GCSAutonomousBlocks(GCSforBlocks):
     def get_edge_name(self, left_vertex_name: str, right_vertex_name: str) -> str:
         if right_vertex_name == "target":
             layer = int(left_vertex_name.split("_")[-2])
-            return "Move f to target at " +  str(layer)
+            return "Move f to target at " + str(layer)
         if left_vertex_name == "start":
             return "Equals start"
         layer = int(left_vertex_name.split("_")[-2])
         left_mode = self.get_mode_from_vertex_name(left_vertex_name)
         right_mode = self.get_mode_from_vertex_name(right_vertex_name)
-        if left_mode in ('0', 0):
+        if left_mode in ("0", 0):
             return "Move f, grasp " + str(right_mode) + " at " + str(layer)
         else:
             return "Move g, ungrasp " + str(left_mode) + " at " + str(layer)
@@ -715,7 +713,7 @@ class GCSAutonomousBlocks(GCSforBlocks):
         if show_graph:
             self.display_graph()
 
-    def display_graph(self, graph_name = "temp") -> None:
+    def display_graph(self, graph_name="temp") -> None:
         """Visually inspect the graph. If solution acquired -- also displays the solution."""
         assert self.graph_built, "Must build graph first!"
         if self.solution.is_success():
@@ -754,15 +752,21 @@ class GCSAutonomousBlocks(GCSforBlocks):
         flow_results = [self.solution.GetSolution(p) for p in flow_variables]
 
         # if not tight -- return just the 0 mode values
-        not_tight = np.any(np.logical_and(0.05 < np.array(flow_results), np.array(flow_results)<0.95))
+        not_tight = np.any(
+            np.logical_and(0.05 < np.array(flow_results), np.array(flow_results) < 0.95)
+        )
         if not_tight:
             modes = []
             vertex_values = []
-            for i in range(0, self.opt.horizon+1, 2):
+            for i in range(0, self.opt.horizon + 1, 2):
                 name = self.get_vertex_name(i, 0)
-                vertex_values += [self.solution.GetSolution( self.name_to_vertex[name].x() )]
+                vertex_values += [
+                    self.solution.GetSolution(self.name_to_vertex[name].x())
+                ]
                 modes += [0]
-            vertex_values += [self.solution.GetSolution(self.name_to_vertex["target"].x())]
+            vertex_values += [
+                self.solution.GetSolution(self.name_to_vertex["target"].x())
+            ]
             modes += [0]
             vertex_values = np.array(vertex_values)
             return modes, vertex_values

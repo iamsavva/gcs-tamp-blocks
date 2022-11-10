@@ -155,16 +155,16 @@ class GCSsetGenerator:
         return HPolyhedron(A, b)
 
     def get_convex_set_experimental(self, free):
-        if free =="free":
+        if free == "free":
             A, b = self.get_convex_set_for_mode_inequality(0)
             return HPolyhedron(A, b)
         if free == "grasping":
-            # bounding box on state but 
-            state_dim = self.opt.num_blocks * (self.opt.block_dim+1)
+            # bounding box on state but
+            state_dim = self.opt.num_blocks * (self.opt.block_dim + 1)
             A = np.eye(state_dim)
             lb = np.zeros(state_dim)
             ub = np.ones(state_dim)
-            ub[0:self.opt.num_blocks * self.opt.block_dim] *= self.opt.ub[0]
+            ub[0 : self.opt.num_blocks * self.opt.block_dim] *= self.opt.ub[0]
 
             # single inequality form, bounding box on state
             A = np.vstack((A, -A))

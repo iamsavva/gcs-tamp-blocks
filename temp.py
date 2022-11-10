@@ -23,14 +23,14 @@ if __name__ == "__main__":
     start_point = Point(np.array([1,1, 1,2, 1,3]))
     target_point = Point(np.array([3,3, 3,1, 3,2]))
 
-    nb = 4
-    ubf = 4.0
-    start_point = Point(np.array([1,1, 1,2, 1,3, 1,4]))
-    target_point = Point(np.array([3,4, 3,3, 3,2, 3,1]))
+    # nb = 4
+    # ubf = 4.0
+    # start_point = Point(np.array([1,1, 1,2, 1,3, 1,4]))
+    # target_point = Point(np.array([3,4, 3,3, 3,2, 3,1]))
 
     options = GCSforAutonomousBlocksOptions(nb, ubf = ubf)
     options.use_convex_relaxation = True
-    options.max_rounded_paths = 100
+    options.max_rounded_paths = 10
 
     gcs = GCSAutonomousBlocks(options)
     gcs.build_the_graph(start_point, target_point)

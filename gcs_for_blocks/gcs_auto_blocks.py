@@ -92,16 +92,43 @@ class GCSAutonomousBlocks(GCSforBlocks):
 
     def add_all_edges(self, start_state: Point, target_state: Point,) -> None:
         ############################
+        
         start_set = self.set_gen.construct_dir_representation_from_point(start_state.x())
         self.connect_vertices("start", start_set, EdgeOptAB.equality_edge())
 
         target_set = self.set_gen.construct_dir_representation_from_point(target_state.x())
         self.connect_vertices(target_set, "target", EdgeOptAB.target_edge())
 
-        for dir in self.set_gen.dir2set:
-            nbhd = self.set_gen.get_1_step_neighbours(dir)
-            for nbh in nbhd:
-                self.connect_vertices(dir, nbh, EdgeOptAB.move_edge())
+        num_edges = 2
+
+        # for dir in self.set_gen.dir2set:
+        #     nbhd = self.set_gen.get_1_step_neighbours(dir)
+        #     for nbh in nbhd:
+        #         self.connect_vertices(dir, nbh, EdgeOptAB.move_edge())
+        #         num_edges += 1
+
+        already_added = set()
+        already_added.add(start_set)
+        frontier = set()
+        frontier.add(start_set)
+        next_frontier = set()
+
+        while target_set not in already_added:
+            for f in frontier:
+                # find neighbours of f
+                nbhd = self.set_gen.get_1_step_neighbours(f)
+                for nbh in nbhd:
+                    # for each neighbour: if it's not in current / previous layers -- add it
+                    if nbh not in already_added:
+                        self.connect_vertices(f, nbh, EdgeOptAB.move_edge())
+                        next_frontier.add(nbh)
+                        num_edges += 1
+            
+            frontier = next_frontier.copy()
+            already_added = already_added.union(next_frontier)
+            next_frontier = set()
+
+        print("num edges is ", num_edges)
 
     ###################################################################################
     # Populating edges and vertices

@@ -30,14 +30,16 @@ if __name__ == "__main__":
 
     options = GCSforAutonomousBlocksOptions(nb, ubf = ubf)
     options.use_convex_relaxation = True
-    options.max_rounded_paths = 10
+    options.max_rounded_paths = 0
 
     gcs = GCSAutonomousBlocks(options)
     gcs.build_the_graph(start_point, target_point)
-    gcs.solve(show_graph=True)
-    modes, vertices = gcs.get_solution_path()
+    gcs.solve_plot_sparse()
 
-    drawer = Draw2DSolution(nb, gcs.opt.ub, modes, vertices, target_point.x(), fast = False, no_arm = True)
-    drawer.draw_solution_no_arm()
+    # gcs.solve(show_graph=True)
+    # modes, vertices = gcs.get_solution_path()
+
+    # drawer = Draw2DSolution(nb, gcs.opt.ub, modes, vertices, target_point.x(), fast = False, no_arm = True)
+    # drawer.draw_solution_no_arm()
 
 

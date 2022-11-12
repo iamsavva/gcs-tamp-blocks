@@ -772,6 +772,21 @@ class GCSforBlocks:
         else:
             return [start] + self.find_path_to_target(edges, v)
 
+    def solve_plot_sparse( self,
+        use_convex_relaxation=None,
+        max_rounded_paths=None,
+        ):
+        self.solve(use_convex_relaxation = use_convex_relaxation, max_rounded_paths = max_rounded_paths, show_graph=False)
+        assert self.solution.is_success(), "Solution was not found"
+        for e in self.gcs.Edges():
+            if not 0.01 <= self.solution.GetSolution(e.phi()):
+                self.gcs.RemoveEdge(e.id())
+        for v in self.gcs.Vertices():
+            if np.any( np.isnan(self.solution.GetSolution(v.x()))):
+                self.gcs.RemoveVertex(v.id())
+        self.solve(use_convex_relaxation = use_convex_relaxation, max_rounded_paths = max_rounded_paths, show_graph=True)
+
+
     def get_solution_path(self) -> T.Tuple[T.List[str], npt.NDArray]:
         """Given a solved GCS problem, and assuming it's tight, find a path from start to target"""
         assert self.graph_built, "Must build graph first!"

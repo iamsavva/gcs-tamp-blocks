@@ -40,14 +40,14 @@ class timeit:
         if descriptor is None:
             INFO("%.3fs since last time-check"%(self.times[-1]-self.times[-2]))
         else:
-            INFO(descriptor + "took %.3fs"%(self.times[-1]-self.times[-2]))
+            INFO(descriptor + " took %.3fs"%(self.times[-1]-self.times[-2]))
 
     def T(self, descriptor = None):
         self.times.append(time.time())
         if descriptor is None:
             INFO("%.3fs since the start"%(self.times[-1]-self.times[0]))
         else:
-            INFO(descriptor + "took %.3fs since the start"%(self.times[-1]-self.times[0]))
+            INFO(descriptor + " took %.3fs since the start"%(self.times[-1]-self.times[0]))
         
 
 

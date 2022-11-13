@@ -720,6 +720,7 @@ class GCSforBlocks:
         use_convex_relaxation=None,
         max_rounded_paths=None,
         show_graph=False,
+        graph_name = "temp",
     ):
         """Solve the GCS program. Must build the graph first."""
         assert self.graph_built, "Must build graph first!"
@@ -748,7 +749,7 @@ class GCSforBlocks:
             ERROR("SOLVE FAILED!")
             ERROR("Solving GCS took %.2f seconds" % (time.time() - start))
         if show_graph:
-            self.display_graph()
+            self.display_graph(graph_name)
 
     def display_graph(self, graph_name="temp") -> None:
         """Visually inspect the graph. If solution acquired -- also displays the solution."""
@@ -759,6 +760,7 @@ class GCSforBlocks:
             graphviz = self.gcs.GetGraphvizString(self.solution, True, precision=2)
         data = pydot.graph_from_dot_data(graphviz)[0]  # type: ignore
         data.write_png(graph_name + ".png")
+        data.write_svg(graph_name + ".svg")
 
         plt = Image(data.create_png())
         display(plt)
@@ -784,7 +786,7 @@ class GCSforBlocks:
         use_convex_relaxation=None,
         max_rounded_paths=None,
         ):
-        self.solve(use_convex_relaxation = use_convex_relaxation, max_rounded_paths = max_rounded_paths, show_graph=False)
+        self.solve(use_convex_relaxation = use_convex_relaxation, max_rounded_paths = max_rounded_paths, show_graph=True, graph_name="temp_original")
         assert self.solution.is_success(), "Solution was not found"
         for e in self.gcs.Edges():
             if not 0.01 <= self.solution.GetSolution(e.phi()):
@@ -792,7 +794,9 @@ class GCSforBlocks:
         for v in self.gcs.Vertices():
             if np.any( np.isnan(self.solution.GetSolution(v.x()))):
                 self.gcs.RemoveVertex(v.id())
-        self.solve(use_convex_relaxation = use_convex_relaxation, max_rounded_paths = max_rounded_paths, show_graph=True)
+            if np.allclose( self.solution.GetSolution(v.x()), np.zeros(self.opt.state_dim) ):
+                self.gcs.RemoveVertex(v.id())
+        self.solve(use_convex_relaxation = use_convex_relaxation, max_rounded_paths = max_rounded_paths, show_graph=True, graph_name="temp_non_empty")
 
 
     def get_solution_path(self) -> T.Tuple[T.List[str], npt.NDArray]:

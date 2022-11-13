@@ -115,14 +115,17 @@ class GCSAutonomousBlocks(GCSforBlocks):
             while target_set_string not in already_added:
                 for f in frontier:
                     # find neighbours of f
-                    nbhd = self.set_gen.get_1_step_neighbours(f)
+                    
+                    # nbhd = self.set_gen.get_1_step_neighbours(f)
+                    nbhd = self.set_gen.get_useful_1_step_neighbours(f, target_set_string)
                     for nbh in nbhd:
                         # for each neighbour: if it's not in current / previous layers -- add it
                         if nbh not in already_added:
-                            self.add_vertex(self.set_gen.dir2set[nbh], nbh)
-                            self.connect_vertices(f, nbh, EdgeOptAB.move_edge())
-                            next_frontier.add(nbh)
-                            num_edges += 1
+                            if nbh in self.set_gen.dir2set:
+                                self.add_vertex(self.set_gen.dir2set[nbh], nbh)
+                                self.connect_vertices(f, nbh, EdgeOptAB.move_edge())
+                                next_frontier.add(nbh)
+                                num_edges += 1
                 
                 frontier = next_frontier.copy()
                 already_added = already_added.union(next_frontier)

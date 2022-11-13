@@ -153,5 +153,23 @@ class SetTesselation:
             ldir[i] = self.opt.dir_iter(ldir[i])
         return nbhd
 
+    def get_useful_1_step_neighbours(self, dir:str, target:str):
+        assert len(dir) == self.opt.set_spec_len, "inappropriate dir: " + dir
+        assert len(target) == self.opt.set_spec_len, "inappropriate target: " + target
+
+        nbhd = []
+        for i in range(len(dir)):
+            if dir[i] == target[i]:
+                continue
+            elif target[i] in self.opt.dir_nbhd[dir[i]]:
+                nbhd += [dir[:i] + target[i] + dir[i+1:]]
+            else:
+                for let in self.opt.dir_nbhd[dir[i]]:
+                    nbhd += [dir[:i] + let + dir[i+1:]]
+        return nbhd
+
+
+
+
         
 

@@ -256,6 +256,7 @@ class GCSforAutonomousBlocksOptions(GCSforBlocksOptions):
 
     dirs = ["A", "B", "L", "R"]
     dir_inverse = {"A": "B", "B":"A", "L":"R", "R":"L"}
+    dir_nbhd = {"A": ["L", "R"], "B":["L", "R"], "L":["A", "B"], "R":["A", "B"]}
     dir_iterator = {"A": "B", "B":"L", "L":"R", "R":"A"}
 
     # @property

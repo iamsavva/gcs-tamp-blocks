@@ -48,14 +48,15 @@ class GCSAutonomousBlocks(GCSforBlocks):
         # init the graph
         self.gcs = GraphOfConvexSets()
         self.graph_built = False
+        self.solution = None
 
         self.set_gen = SetTesselation(options)
 
         # name to vertex dictionary, populated as we populate the graph with vertices
         self.name_to_vertex = dict()  # T.Dict[str, GraphOfConvexSets.Vertex]
+        print("finished init")
 
-
-    def build_the_graph(
+    def build_the_graph_simple(
         self,
         start_state: Point,
         target_state: Point,
@@ -69,64 +70,65 @@ class GCSAutonomousBlocks(GCSforBlocks):
         self.gcs = GraphOfConvexSets()
         self.graph_built = False
 
-        # add all vertices
-        self.add_all_vertices(start_state, target_state)
-
         # add all edges
-        self.add_all_edges(start_state, target_state)
+        self.add_everything(start_state, target_state)
 
         self.graph_built = True
 
     ###################################################################################
     # Adding layers of nodes (trellis diagram style)
 
-    def add_all_vertices(
-        self,
-        start_state: Point,
-        target_state: Point,
-    ) -> None:
+    def add_everything(self, start_state: Point, target_state: Point) -> None:
         self.add_vertex(start_state, "start")
-        for dir in self.set_gen.dir2set:
-            self.add_vertex(self.set_gen.dir2set[dir], dir)
         self.add_vertex(target_state, "target")
 
-    def add_all_edges(self, start_state: Point, target_state: Point,) -> None:
         ############################
-        
-        start_set = self.set_gen.construct_dir_representation_from_point(start_state.x())
-        self.connect_vertices("start", start_set, EdgeOptAB.equality_edge())
+        start_set_string = self.set_gen.construct_dir_representation_from_point(start_state.x())
+        start_set = self.set_gen.dir2set[start_set_string]
+        self.add_vertex(start_set, start_set_string)
+        self.connect_vertices("start", start_set_string, EdgeOptAB.equality_edge())
 
-        target_set = self.set_gen.construct_dir_representation_from_point(target_state.x())
-        self.connect_vertices(target_set, "target", EdgeOptAB.target_edge())
+        target_set_string = self.set_gen.construct_dir_representation_from_point(target_state.x())
+        target_set = self.set_gen.dir2set[target_set_string]
+        self.add_vertex(target_set, target_set_string)
+        self.connect_vertices(target_set_string, "target", EdgeOptAB.target_edge())
 
         num_edges = 2
 
-        # for dir in self.set_gen.dir2set:
-        #     nbhd = self.set_gen.get_1_step_neighbours(dir)
-        #     for nbh in nbhd:
-        #         self.connect_vertices(dir, nbh, EdgeOptAB.move_edge())
-        #         num_edges += 1
+        if self.opt.edge_gen == "all":
+            for dir in self.set_gen.dir2set:
+                self.add_vertex(self.set_gen.dir2set[dir], dir)
+                nbhd = self.set_gen.get_1_step_neighbours(dir)
 
-        already_added = set()
-        already_added.add(start_set)
-        frontier = set()
-        frontier.add(start_set)
-        next_frontier = set()
-
-        while target_set not in already_added:
-            for f in frontier:
-                # find neighbours of f
-                nbhd = self.set_gen.get_1_step_neighbours(f)
                 for nbh in nbhd:
-                    # for each neighbour: if it's not in current / previous layers -- add it
-                    if nbh not in already_added:
-                        self.connect_vertices(f, nbh, EdgeOptAB.move_edge())
-                        next_frontier.add(nbh)
-                        num_edges += 1
-            
-            frontier = next_frontier.copy()
-            already_added = already_added.union(next_frontier)
+                    self.add_vertex(self.set_gen.dir2set[nbh], nbh)
+                    self.connect_vertices(dir, nbh, EdgeOptAB.move_edge())
+                    num_edges += 1
+                    
+        elif self.opt.edge_gen == "binary_tree_down":
+            already_added = set()
+            already_added.add(start_set_string)
+            frontier = set()
+            frontier.add(start_set_string)
             next_frontier = set()
+
+            while target_set_string not in already_added:
+                for f in frontier:
+                    # find neighbours of f
+                    nbhd = self.set_gen.get_1_step_neighbours(f)
+                    for nbh in nbhd:
+                        # for each neighbour: if it's not in current / previous layers -- add it
+                        if nbh not in already_added:
+                            self.add_vertex(self.set_gen.dir2set[nbh], nbh)
+                            self.connect_vertices(f, nbh, EdgeOptAB.move_edge())
+                            next_frontier.add(nbh)
+                            num_edges += 1
+                
+                frontier = next_frontier.copy()
+                already_added = already_added.union(next_frontier)
+                next_frontier = set()
+        else:
+            raise Exception("Inapproprate edge gen: " + self.opt.edge_gen) 
 
         print("num edges is ", num_edges)
 
@@ -162,18 +164,6 @@ class GCSAutonomousBlocks(GCSforBlocks):
         if edge_opt.add_each_block_movement_cost:
             # self.add_each_block_movement_cost(edge)
             self.add_full_movement_cost(edge)
-
-
-    def add_vertex(
-        self, convex_set: HPolyhedron, name: str
-    ) -> GraphOfConvexSets.Vertex:
-        """
-        Define a vertex with a convex set.
-        """
-        # create a vertex
-        vertex = self.gcs.AddVertex(convex_set, name)
-        self.name_to_vertex[name] = vertex
-        return vertex
 
     ###################################################################################
     # Adding constraints and cost terms

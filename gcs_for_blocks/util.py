@@ -49,8 +49,38 @@ class timeit:
         else:
             INFO(descriptor + "took %.3fs since the start"%(self.times[-1]-self.times[0]))
         
-        
+
+
+from pydrake.solvers import MathematicalProgram
+from pydrake.solvers import Solve
+import numpy as np
+import matplotlib.pyplot as plt
+
+from pydrake.geometry.optimization import HPolyhedron
+
+
+def ChebyshevCenter(poly:HPolyhedron):
+    # Ax <= b
+    m = poly.A().shape[0]
+    n = poly.A().shape[1]
     
+    prog = MathematicalProgram()
+    x = prog.NewContinuousVariables(n, "x")
+    r = prog.NewContinuousVariables(1, "r")
+    prog.AddLinearCost(np.array([-1]), 0, r)
 
+    big_num = 100000
 
-        
+    prog.AddBoundingBoxConstraint(0, big_num, r)
+    
+    a = np.zeros((1, n+1))
+    for i in range(m):
+        a[0,0] = np.linalg.norm(poly.A()[i, :])
+        a[0,1:] = poly.A()[i, :]
+        prog.AddLinearConstraint(a, -np.array([big_num]), np.array([poly.b()[i]]), np.append(r, x) )
+
+    result = Solve(prog)
+    if not result.is_success():
+        return False, None, None
+    else:
+        return True, result.GetSolution(x), result.GetSolution(r)[0]

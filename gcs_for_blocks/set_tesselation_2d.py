@@ -8,7 +8,7 @@ import numpy.typing as npt
 from pydrake.geometry.optimization import HPolyhedron
 
 from .gcs_options import GCSforAutonomousBlocksOptions
-from .util import WARN, INFO, all_possible_combinations_of_items, timeit
+from .util import WARN, INFO, all_possible_combinations_of_items, timeit, ChebyshevCenter
 
 from tqdm import tqdm
 
@@ -36,12 +36,10 @@ class SetTesselation:
             # set_for_dir_rep = set_for_dir_rep.ReduceInequalities()
 
             # check that it's non-empty
-            try:
-                set_for_dir_rep.ChebyshevCenter()
+            solved, x, r = ChebyshevCenter(set_for_dir_rep)
+            if solved and r >= 0.00001:
                 self.dir2set[dir_rep] = set_for_dir_rep
-            except RuntimeError:
-                # this set is empty
-                continue
+            
 
     def gen_set_from_dir_rep(self, dir_rep: str):
         A, b = self.get_bounding_box_constraint()

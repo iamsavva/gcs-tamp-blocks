@@ -178,6 +178,8 @@ class GCSforBlocksOptions:
 
     symmetric_set_def: bool = True
 
+    edge_gen: str = "all"
+
     @property
     def num_modes(self) -> int:
         """

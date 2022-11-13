@@ -46,6 +46,7 @@ class GCSforBlocks:
 
         # init the graph
         self.gcs = GraphOfConvexSets()
+        self.solution = None
         self.graph_built = False
 
         self.set_gen = GCSsetGenerator(options)
@@ -237,16 +238,21 @@ class GCSforBlocks:
 
     def add_vertex(
         self, convex_set: HPolyhedron, name: str
-    ) -> GraphOfConvexSets.Vertex:
+    ) -> None:
         """
         Define a vertex with a convex set.
         """
-        # create a vertex
-        vertex = self.gcs.AddVertex(convex_set, name)
-        self.name_to_vertex[name] = vertex
-        if not convex_set.IsBounded():
-            WARN("Convex set for", name, "is not bounded!")
-        return vertex
+        # print(self.name_to_vertex.keys())
+        # print(name)
+        if name not in self.name_to_vertex:
+            # print("adding " + name)
+            vertex = self.gcs.AddVertex(convex_set, name)
+            self.name_to_vertex[name] = vertex
+            # if not convex_set.IsBounded():
+            #     WARN("Convex set for", name, "is not bounded!")
+            # return vertex
+        # else: 
+        #     return self.name_to_vertex[name]
 
     def connect_vertices(
         self, left_vertex_name: str, right_vertex_name: str, edge_opt: EdgeOptions
@@ -732,6 +738,8 @@ class GCSforBlocks:
             options.max_rounded_paths = max_rounded_paths
         INFO("Solving...")
         start = time.time()
+        # print([v.id() for v in self.gcs.Vertices()])
+        self.display_graph()
         self.solution = self.gcs.SolveShortestPath(start_vertex, target_vertex, options)
         if self.solution.is_success():
             YAY("Solving GCS took %.2f seconds" % (time.time() - start))
@@ -745,10 +753,10 @@ class GCSforBlocks:
     def display_graph(self, graph_name="temp") -> None:
         """Visually inspect the graph. If solution acquired -- also displays the solution."""
         assert self.graph_built, "Must build graph first!"
-        if self.solution.is_success():
-            graphviz = self.gcs.GetGraphvizString(self.solution, True, precision=2)
-        else:
+        if self.solution is None or not self.solution.is_success():
             graphviz = self.gcs.GetGraphvizString()
+        else:
+            graphviz = self.gcs.GetGraphvizString(self.solution, True, precision=2)
         data = pydot.graph_from_dot_data(graphviz)[0]  # type: ignore
         data.write_png(graph_name + ".png")
 

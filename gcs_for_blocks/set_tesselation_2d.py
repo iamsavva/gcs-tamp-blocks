@@ -52,7 +52,13 @@ class SetTesselation:
             b = np.hstack((b, b_dir))
         return HPolyhedron(A, b)
 
-    def get_constraints_for_direction(self, dir: str, i, j):
+    def get_constraints_for_direction(self, dir, i, j):
+        if self.opt.symmetric_set_def:
+            return self.get_constraints_for_direction_sym(dir,i,j)
+        else:
+            return self.get_constraints_for_direction_asym(dir,i,j)
+
+    def get_constraints_for_direction_asym(self, dir: str, i, j):
         w = self.opt.block_width
         bd = self.opt.block_dim
         A = np.zeros((2, self.opt.state_dim))
@@ -72,6 +78,33 @@ class SetTesselation:
             A[0, j * bd], A[0, i * bd] = 1, -1
             A[1, i * bd + 1], A[1, j * bd + 1] = 1, -1
             b = np.array([-w, w])
+        return A, b
+
+    def get_constraints_for_direction_sym(self, dir: str, i, j):
+        w = self.opt.block_width
+        bd = self.opt.block_dim
+        sd = self.opt.state_dim
+        xi, yi = i * bd, i * bd + 1
+        xj, yj = j * bd, j * bd + 1
+        a0, a1, a2 = np.zeros(sd), np.zeros(sd), np.zeros(sd)
+        if dir == "L":
+            a0[xi], a0[yi], a0[xj], a0[yj] = 1, -1, -1, 1
+            a1[xi], a1[yi], a1[xj], a1[yj] = 1, 1, -1, -1
+            a2[xi], a2[yi], a2[xj], a2[yj] = 1, 0, -1, 0
+        elif dir == "A":
+            a0[xi], a0[yi], a0[xj], a0[yj] = 1, -1, -1, 1
+            a1[xi], a1[yi], a1[xj], a1[yj] = -1, -1, 1, 1
+            a2[xi], a2[yi], a2[xj], a2[yj] = 0, -1, 0, 1
+        elif dir == "R":
+            a0[xi], a0[yi], a0[xj], a0[yj] = -1, 1, 1, -1
+            a1[xi], a1[yi], a1[xj], a1[yj] = -1, -1, 1, 1
+            a2[xi], a2[yi], a2[xj], a2[yj] = -1, 0, 1, 0
+        elif dir == "B":
+            a0[xi], a0[yi], a0[xj], a0[yj] = -1, 1, 1, -1
+            a1[xi], a1[yi], a1[xj], a1[yj] = 1, 1, -1, -1
+            a2[xi], a2[yi], a2[xj], a2[yj] = 0, 1, 0, -1
+        A = np.vstack((a0, a1, a2))
+        b = np.array([0, 0, -w])
         return A, b
 
     def get_bounding_box_constraint(self) -> T.Tuple[npt.NDArray, npt.NDArray]:

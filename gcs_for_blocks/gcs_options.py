@@ -176,6 +176,8 @@ class GCSforBlocksOptions:
     # it reduces the number of edges and cycles
     connect_source_target_to_single_set: bool = True
 
+    symmetric_set_def: bool = True
+
     @property
     def num_modes(self) -> int:
         """

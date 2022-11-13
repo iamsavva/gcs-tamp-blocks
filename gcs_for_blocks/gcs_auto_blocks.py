@@ -246,30 +246,3 @@ class GCSAutonomousBlocks(GCSforBlocks):
         sets = [v.name() for v in path]
         vertex_values = np.vstack([self.solution.GetSolution(v.x()) for v in path])
         return sets, vertex_values
-
-    # def verbose_solution_description(self) -> None:
-    #     """Describe the solution in text: grasp X, move to Y, ungrasp Z"""
-    #     assert self.solution.is_success(), "Solution was not found"
-    #     modes, vertices = self.get_solution_path()
-    #     for i in range(len(vertices)):
-    #         vertices[i] = ["%.2f" % v for v in vertices[i]]
-    #     mode_now = modes[1]
-    #     INFO("-----------------------")
-    #     INFO("Solution is:")
-    #     INFO("-----------------------")
-    #     for i in range(len(modes)):  # pylint: disable=consider-using-enumerate
-    #         sg = vertices[i][0 : self.opt.block_dim]
-    #         if modes[i] == "start":
-    #             INFO("Start at", sg)
-    #         elif modes[i] == "target":
-    #             INFO("Move to", sg, "; Finish")
-    #         else:
-    #             mode_next = modes[i]
-    #             if mode_next == mode_now:
-    #                 grasp = ""
-    #             elif mode_next == "0":
-    #                 grasp = "Ungrasp block " + str(mode_now)
-    #             else:
-    #                 grasp = "Grasp block " + str(mode_next)
-    #             mode_now = mode_next
-    #             INFO("Move to", sg, "; " + grasp)

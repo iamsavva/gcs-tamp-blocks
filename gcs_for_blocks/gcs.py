@@ -697,16 +697,16 @@ class GCSforBlocks:
     def get_edge_name(self, left_vertex_name: str, right_vertex_name: str) -> str:
         if right_vertex_name == "target":
             layer = int(left_vertex_name.split("_")[-2])
-            return "Move f to target at " + str(layer)
+            return "Free move to target at " + str(layer)
         if left_vertex_name == "start":
             return "Equals start"
         layer = int(left_vertex_name.split("_")[-2])
         left_mode = self.get_mode_from_vertex_name(left_vertex_name)
         right_mode = self.get_mode_from_vertex_name(right_vertex_name)
         if left_mode in ("0", 0):
-            return "Move f, grasp " + str(right_mode) + " at " + str(layer)
+            return "Free move, grasp " + str(right_mode) #+ " at " + str(layer)
         else:
-            return "Move g, ungrasp " + str(left_mode) + " at " + str(layer)
+            return "Grasping move, ungrasp " + str(left_mode) #+ " at " + str(layer)
         # return "E: " + left_vertex_name + " -> " + right_vertex_name
 
     def set_names_for_layer(self, set_ids, layer):

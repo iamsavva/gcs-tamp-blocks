@@ -138,3 +138,21 @@ class GCSforBlocksSplitMove(GCSforBlocks):
     def get_vertex_name(self, layer: int, set_id: int, t="M") -> str:
         """Naming convention is: M_<layer>_<set_id> for regular nodes"""
         return t + "_" + str(layer) + "_" + str(set_id)
+
+    def get_edge_name(self, left_vertex_name: str, right_vertex_name: str) -> str:
+        if right_vertex_name == "target":
+            layer = int(left_vertex_name.split("_")[-2])
+            return "Free move to target" # at " + str(layer)
+        if left_vertex_name == "start":
+            return "Equals start"
+
+        layer = int(left_vertex_name.split("_")[-2])
+        left_mode = self.get_mode_from_vertex_name(left_vertex_name)
+        right_mode = self.get_mode_from_vertex_name(right_vertex_name)
+        if left_mode in ("0", 0) and right_mode in ("0", 0):
+            return "Free move"
+        elif left_mode in ("0", 0):
+            return "Grasp " + str(right_mode)
+        else:
+            return "Move, ungrasp " + str(left_mode) #+ " at " + str(layer)
+        # return "E: " + left_vertex_name + " -> " + right_vertex_name

@@ -81,6 +81,7 @@ def make_simple_transparent_gcs_test(
     display_graph: bool = False,
     start_state=None,
     target_state=None,
+    lbf=None,
     ubf=None,
     add_grasp_cost=True,
     randomize=False,
@@ -93,12 +94,16 @@ def make_simple_transparent_gcs_test(
         ub_float = ubf
     else:
         ub_float = scaling * width * 2 * (num_blocks)
+    if lbf is not None:
+        lb_float = lbf
+    else:
+        lb_float = 0.0
 
     options = GCSforBlocksOptions(
         block_dim=block_dim,
         num_blocks=num_blocks,
         horizon=horizon,
-        lbf=0.0,
+        lbf=lb_float,
         ubf=ub_float,
     )
     options.use_convex_relaxation = use_convex_relaxation
@@ -230,51 +235,65 @@ def make_some_simple_transparent_tests():
 
 
 if __name__ == "__main__":
+    # dim = 1
+    # nb = 5
+    # h = 3
+    # seed = 4
+    # plots = True
+    # randomize = False
+
+    # start = np.array([0, 76, 11, 13, 24, 67])
+    # end = np.array([75, 3, 70, 71, 70, 75])
+    # ub = 500
+
+    # figuring out the precisecost
+    # moving_shit = np.sum(np.abs(end[1:] - start[1:]))
+    # i_am_at = start[0] + np.sum((end[1:] - start[1:]))
+    # moving_myself = np.abs((end[0] - i_am_at))
+    # print(moving_shit + moving_myself)
+
+    # lb = 0
+    # delta = 0
+    # pay = 0
+    # # displacement vector
+    # dis = end[1:] - start[1:]
+    # # total negative, positive diplacement
+    # neg_dis = sum([i for i in dis if i < 0])
+    # pos_dis = sum([i for i in dis if i > 0])
+    # # violation of constraints by displacement
+    # lbv = abs(min(0, start[0] + neg_dis - lb))
+    # ubv = max(0, start[0] + pos_dis - ub)
+    # # if any violated -- must adjust
+    # # possibly must perform multiple moves
+    # delta = neg_dis + pos_dis + lbv - ubv
+    # pay = abs(neg_dis) + pos_dis + lbv + ubv
+    # pay += abs(end[0] - (start[0] + delta))
+    # print(pay)
+
     dim = 1
-    nb = 5
+    nb = 2
     h = 3
     seed = 4
     plots = True
     randomize = False
 
-    start = np.array([0, 76, 11, 13, 24, 67])
-    end = np.array([75, 3, 70, 71, 70, 75])
-    ub = 500
-
-    moving_shit = np.sum(np.abs(end[1:] - start[1:]))
-    i_am_at = start[0] + np.sum((end[1:] - start[1:]))
-    moving_myself = np.abs((end[0] - i_am_at))
-    print(moving_shit + moving_myself)
-
-    lb = 0
-    delta = 0
-    pay = 0
-    # displacement vector
-    dis = end[1:] - start[1:]
-    # total negative, positive diplacement
-    neg_dis = sum([i for i in dis if i < 0])
-    pos_dis = sum([i for i in dis if i > 0])
-    # violation of constraints by displacement
-    lbv = abs(min(0, start[0] + neg_dis - lb))
-    ubv = max(0, start[0] + pos_dis - ub)
-    # if any violated -- must adjust
-    # possibly must perform multiple moves
-    delta = neg_dis + pos_dis + lbv - ubv
-    pay = abs(neg_dis) + pos_dis + lbv + ubv
-    pay += abs(end[0] - (start[0] + delta))
-    print(pay)
+    # start = np.array([50, 0, 35])
+    # end = np.array([35, 25, 35])
+    lbf = 0
+    ubf = 70
 
     # gcs,_,_=make_simple_transparent_gcs_test(dim, nb, h, constructor = GCSforBlocks, graph_name = "og_micp", use_convex_relaxation=False, start_state=start, target_state=end, ubf = ub, display_graph=plots, max_rounded_paths=0, add_grasp_cost=False, randomize=randomize, seed=seed)
     gcs, _, _ = make_simple_transparent_gcs_test(
         dim,
         nb,
         h,
-        constructor=GCSforBlocks,
+        constructor=GCSforBlocksSplitMove,
         graph_name="og12",
         use_convex_relaxation=True,
-        start_state=start,
-        target_state=end,
-        ubf=ub,
+        # start_state=start,
+        # target_state=end,
+        # lbf=lbf,
+        # ubf=ubf,
         display_graph=plots,
         max_rounded_paths=0,
         add_grasp_cost=False,

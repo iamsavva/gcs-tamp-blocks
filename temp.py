@@ -41,18 +41,24 @@ if __name__ == "__main__":
     options = GCSforAutonomousBlocksOptions(nb, ubf = ubf)
     options.use_convex_relaxation = True
     options.max_rounded_paths = 0
+    options.problem_complexity = "collision-free-all-moving"
     options.edge_gen = "binary_tree_down" # binary_tree_down
     options.symmetric_set_def = True
+    options.rounding_seed = 1
+    options.custom_rounding_paths = 20
+    
 
     x = timeit()
     gcs = GCSAutonomousBlocks(options)
-    # x.dt("initing")
     gcs.build_the_graph_simple(start_point, target_point)
-    INFO("Initial number of v/e is ", len(gcs.gcs.Vertices()), len(gcs.gcs.Edges()))
+    gcs.solve(show_graph=False, verbose=True)
+    costs = np.array([ cost for (_, cost) in gcs.get_solution_path()])
+
+    # INFO("Initial number of v/e is ", len(gcs.gcs.Vertices()), len(gcs.gcs.Edges()))
     # gcs.display_graph()
     # x.dt("building")
-    gcs.solve_plot_sparse()
-    INFO("Number of used v/e is ", len(gcs.gcs.Vertices()), len(gcs.gcs.Edges()))
+    # gcs.solve_plot_sparse()
+    # INFO("Number of used v/e is ", len(gcs.gcs.Vertices()), len(gcs.gcs.Edges()))
     # gcs.solve(show_graph=False)
     # x.dt("solving")
     # modes, vertices = gcs.get_solution_path()

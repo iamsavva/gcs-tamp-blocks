@@ -115,7 +115,7 @@ class GCSAutonomousBlocks(GCSforBlocks):
             while target_set_string not in already_added:
                 for f in frontier:
                     # find neighbours of f
-                    
+
                     # nbhd = self.set_gen.get_1_step_neighbours(f)
                     nbhd = self.set_gen.get_useful_1_step_neighbours(f, target_set_string)
                     for nbh in nbhd:
@@ -126,7 +126,7 @@ class GCSAutonomousBlocks(GCSforBlocks):
                                 self.connect_vertices(f, nbh, EdgeOptAB.move_edge())
                                 next_frontier.add(nbh)
                                 num_edges += 1
-                
+            
                 frontier = next_frontier.copy()
                 already_added = already_added.union(next_frontier)
                 next_frontier = set()
@@ -216,26 +216,25 @@ class GCSAutonomousBlocks(GCSforBlocks):
     ###################################################################################
     # Solve and display solution
 
-    def get_solution_path(self) -> T.Tuple[T.List[str], npt.NDArray]:
-        """Given a solved GCS problem, and assuming it's tight, find a path from start to target"""
-        assert self.graph_built, "Must build graph first!"
-        assert self.solution.is_success(), "Solution was not found"
-        # find edges with non-zero flow
-        flow_variables = [e.phi() for e in self.gcs.Edges()]
-        flow_results = [self.solution.GetSolution(p) for p in flow_variables]
+    # def get_solution_path(self) -> T.Tuple[T.List[str], npt.NDArray]:
+    #     """Given a solved GCS problem, and assuming it's tight, find a path from start to target"""
+    #     assert self.graph_built, "Must build graph first!"
+    #     assert self.solution.is_success(), "Solution was not found"
+    #     # find edges with non-zero flow
+    #     flow_variables = [e.phi() for e in self.gcs.Edges()]
+    #     flow_results = [self.solution.GetSolution(p) for p in flow_variables]
 
-        not_tight = np.any(
-            np.logical_and(0.05 < np.array(flow_results), np.array(flow_results) < 0.95)
-        )
-        if not_tight:
-            WARN("CONVEX RELAXATION NOT TIGHT")
-            return
+    #     not_tight = np.any(
+    #         np.logical_and(0.05 < np.array(flow_results), np.array(flow_results) < 0.95)
+    #     )
+    #     if not_tight:
+    #         WARN("CONVEX RELAXATION NOT TIGHT")
 
-        active_edges = [
-            edge for edge, flow in zip(self.gcs.Edges(), flow_results) if flow >= 0.99
-        ]
-        # using these edges, find the path from start to target
-        path = self.find_path_to_target(active_edges, self.name_to_vertex["start"])
-        sets = [v.name() for v in path]
-        vertex_values = np.vstack([self.solution.GetSolution(v.x()) for v in path])
-        return sets, vertex_values
+    #     active_edges = [
+    #         edge for edge, flow in zip(self.gcs.Edges(), flow_results) if flow >= 0.99
+    #     ]
+    #     # using these edges, find the path from start to target
+    #     path = self.find_path_to_target(active_edges, self.name_to_vertex["start"])
+    #     sets = [v.name() for v in path]
+    #     vertex_values = np.vstack([self.solution.GetSolution(v.x()) for v in path])
+    #     return sets, vertex_values

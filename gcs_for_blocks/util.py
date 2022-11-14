@@ -2,20 +2,24 @@ from colorama import Fore
 import typing as T
 import time
 
-def ERROR(*texts):
-    print(Fore.RED + " ".join([str(text) for text in texts]))
+def ERROR(*texts, verbose:bool=True):
+    if verbose:
+        print(Fore.RED + " ".join([str(text) for text in texts]))
 
 
-def WARN(*texts):
-    print(Fore.YELLOW + " ".join([str(text) for text in texts]))
+def WARN(*texts, verbose:bool=True):
+    if verbose:
+        print(Fore.YELLOW + " ".join([str(text) for text in texts]))
 
 
-def INFO(*texts):
-    print(Fore.BLUE + " ".join([str(text) for text in texts]))
+def INFO(*texts, verbose:bool=True):
+    if verbose:
+        print(Fore.BLUE + " ".join([str(text) for text in texts]))
 
 
-def YAY(*texts):
-    print(Fore.GREEN + " ".join([str(text) for text in texts]))
+def YAY(*texts, verbose:bool=True):
+    if verbose:
+        print(Fore.GREEN + " ".join([str(text) for text in texts]))
 
 
 def all_possible_combinations_of_items(item_set: T.List[str], num_items: int):

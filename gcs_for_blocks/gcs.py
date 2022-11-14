@@ -721,6 +721,7 @@ class GCSforBlocks:
         max_rounded_paths=None,
         show_graph=False,
         graph_name = "temp",
+        verbose=True
     ):
         """Solve the GCS program. Must build the graph first."""
         assert self.graph_built, "Must build graph first!"
@@ -737,50 +738,18 @@ class GCSforBlocks:
         if use_convex_relaxation:
             options.preprocessing = True  # TODO Do I need to deal with this?
             options.max_rounded_paths = max_rounded_paths
-        INFO("Solving...")
+            options.rounding_seed = self.opt.rounding_seed
+        INFO("Solving...", verbose=verbose)
         start = time.time()
-        # print([v.id() for v in self.gcs.Vertices()])
-        self.display_graph()
         self.solution = self.gcs.SolveShortestPath(start_vertex, target_vertex, options)
         if self.solution.is_success():
-            YAY("Solving GCS took %.2f seconds" % (time.time() - start))
-            YAY("Optimal cost is %.5f" % self.solution.get_optimal_cost())
+            YAY("Solving GCS took %.2f seconds" % (time.time() - start), verbose=verbose)
+            YAY("Optimal cost is %.5f" % self.solution.get_optimal_cost(), verbose=verbose)
         else:
-            ERROR("SOLVE FAILED!")
-            ERROR("Solving GCS took %.2f seconds" % (time.time() - start))
+            ERROR("SOLVE FAILED!", verbose=verbose)
+            ERROR("Solving GCS took %.2f seconds" % (time.time() - start), verbose=verbose)
         if show_graph:
             self.display_graph(graph_name)
-
-    def display_graph(self, graph_name="temp") -> None:
-        """Visually inspect the graph. If solution acquired -- also displays the solution."""
-        assert self.graph_built, "Must build graph first!"
-        if self.solution is None or not self.solution.is_success():
-            graphviz = self.gcs.GetGraphvizString()
-        else:
-            graphviz = self.gcs.GetGraphvizString(self.solution, True, precision=2)
-        data = pydot.graph_from_dot_data(graphviz)[0]  # type: ignore
-        data.write_png(graph_name + ".png")
-        data.write_svg(graph_name + ".svg")
-
-        plt = Image(data.create_png())
-        display(plt)
-
-    def find_path_to_target(
-        self,
-        edges: T.List[GraphOfConvexSets.Edge],
-        start: GraphOfConvexSets.Vertex,
-    ) -> T.List[GraphOfConvexSets.Vertex]:
-        """Given a set of active edges, find a path from start to target"""
-        # assuming edges are tight
-        # find edge that has the current vertex as a start
-        current_edge = next(e for e in edges if e.u() == start)
-        # get the next vertex and continue
-        v = current_edge.v()
-        target_reached = v == self.name_to_vertex["target"]
-        if target_reached:
-            return [start] + [v]
-        else:
-            return [start] + self.find_path_to_target(edges, v)
 
     def solve_plot_sparse( self,
         use_convex_relaxation=None,
@@ -798,6 +767,43 @@ class GCSforBlocks:
                 self.gcs.RemoveVertex(v.id())
         self.solve(use_convex_relaxation = use_convex_relaxation, max_rounded_paths = max_rounded_paths, show_graph=True, graph_name="temp_non_empty")
 
+    def display_graph(self, graph_name="temp") -> None:
+        """Visually inspect the graph. If solution acquired -- also displays the solution."""
+        assert self.graph_built, "Must build graph first!"
+        if self.solution is None or not self.solution.is_success():
+            graphviz = self.gcs.GetGraphvizString()
+        else:
+            graphviz = self.gcs.GetGraphvizString(self.solution, True, precision=2)
+        data = pydot.graph_from_dot_data(graphviz)[0]  # type: ignore
+        data.write_png(graph_name + ".png")
+        data.write_svg(graph_name + ".svg")
+
+        plt = Image(data.create_png())
+        # display(plt)
+
+    def find_path_to_target(
+        self,
+        edges: T.List[GraphOfConvexSets.Edge],
+        start: GraphOfConvexSets.Vertex,
+    ) -> T.List[GraphOfConvexSets.Vertex]:
+        """Given a set of active edges, find a path from start to target"""
+        # seed
+        np.random.seed(self.opt.rounding_seed)
+        
+        edges_out = [e for e in edges if e.u() == start]
+        flows_out = np.array([self.solution.GetSolution(e.phi()) for e in edges_out ])
+        proabilities = np.where(flows_out<0, 0, flows_out)
+        proabilities /= sum(proabilities)
+        
+        current_edge = np.random.choice(edges_out, 1, p=proabilities)[0]
+        # get the next vertex and continue
+        v = current_edge.v()
+        target_reached = v == self.name_to_vertex["target"]
+        if target_reached:
+            return [start] + [v], [current_edge]
+        else:
+            v, e = self.find_path_to_target(edges, v)
+            return [start] + v, [current_edge] + e
 
     def get_solution_path(self) -> T.Tuple[T.List[str], npt.NDArray]:
         """Given a solved GCS problem, and assuming it's tight, find a path from start to target"""
@@ -806,39 +812,54 @@ class GCSforBlocks:
         # find edges with non-zero flow
         flow_variables = [e.phi() for e in self.gcs.Edges()]
         flow_results = [self.solution.GetSolution(p) for p in flow_variables]
-
-        # if not tight -- return just the 0 mode values
         not_tight = np.any(
             np.logical_and(0.05 < np.array(flow_results), np.array(flow_results) < 0.95)
         )
         if not_tight:
-            modes = []
-            vertex_values = []
-            for i in range(0, self.opt.horizon + 1, 2):
-                name = self.get_vertex_name(i, 0)
-                vertex_values += [
-                    self.solution.GetSolution(self.name_to_vertex[name].x())
-                ]
-                modes += [0]
-            vertex_values += [
-                self.solution.GetSolution(self.name_to_vertex["target"].x())
-            ]
-            modes += [0]
-            vertex_values = np.array(vertex_values)
-            return modes, vertex_values
-
+            WARN("Solution s not tight, returning A path, not THE optimal path")
+        
         active_edges = [
-            edge for edge, flow in zip(self.gcs.Edges(), flow_results) if flow >= 0.99
+            edge for edge, flow in zip(self.gcs.Edges(), flow_results) if flow >= 0.01
         ]
+        if not_tight:
+            # gen random paths
+            vertex_paths, edge_paths = [], []
+            for i in range(max(1,self.opt.custom_rounding_paths)):
+                vertices, edges = self.find_path_to_target(active_edges, self.name_to_vertex["start"])
+                vertex_paths += [vertices]
+                edge_paths += [edges]
+                self.opt.rounding_seed += 1
+            # resolve
+            solutions = []
+            for vertices, edges in zip(vertex_paths, edge_paths):
+                for e in self.gcs.Edges():
+                    if e not in edges:
+                        e.AddPhiConstraint(False)
+                self.solve(use_convex_relaxation=False, max_rounded_paths=0, verbose=False)
+                active_edges = [
+                    edge for edge, flow in zip(self.gcs.Edges(), flow_results) if flow >= 0.01
+                ]
+                v_path, _ = self.find_path_to_target(active_edges, self.name_to_vertex["start"])
+                v_name_path = [v.name() for v in v_path]
+                cost = self.solution.get_optimal_cost()
+                self.gcs.ClearAllPhiConstraints()
+                solutions.append((v_name_path, cost))
+
+            costs = np.array([ cost for (_, cost) in solutions])
+            print("Min:", np.min(costs), "\nMax:", np.max(costs), "\nAverage:", np.mean(costs), "\nSTD:", np.std(costs))
+            return solutions
+
+
         # using these edges, find the path from start to target
-        path = self.find_path_to_target(active_edges, self.name_to_vertex["start"])
+        path, _ = self.find_path_to_target(active_edges, self.name_to_vertex["start"])
         modes = [v.name() for v in path]
-        modes = [
-            str(self.get_mode_from_vertex_name(mode))
-            if mode not in ("start", "target")
-            else mode
-            for mode in modes
-        ]
+        if self.opt.problem_complexity != "collision-free-all-moving":
+            modes = [
+                str(self.get_mode_from_vertex_name(mode))
+                if mode not in ("start", "target")
+                else mode
+                for mode in modes
+            ]
         vertex_values = np.vstack([self.solution.GetSolution(v.x()) for v in path])
         return modes, vertex_values
 

@@ -169,7 +169,9 @@ class GCSforBlocksOptions:
 
     # when solving, this is the max number of rounded paths
     max_rounded_paths: int = 50
+    rounding_seed: int = 0
     use_convex_relaxation: bool = True
+    custom_rounding_paths: int = 5
 
     # whether source and target ought to be connected to just one set in the mode
     # TODO: this should really be a default behavior always;

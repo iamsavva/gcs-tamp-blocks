@@ -796,9 +796,12 @@ class GCSforBlocks:
         proabilities /= sum(proabilities)
         
         current_edge = np.random.choice(edges_out, 1, p=proabilities)[0]
+        # current_edge = np.random.choice(edges_out, 1)[0]
         # get the next vertex and continue
         v = current_edge.v()
+
         target_reached = v == self.name_to_vertex["target"]
+        
         if target_reached:
             return [start] + [v], [current_edge]
         else:
@@ -819,7 +822,7 @@ class GCSforBlocks:
             WARN("Solution s not tight, returning A path, not THE optimal path")
         
         active_edges = [
-            edge for edge, flow in zip(self.gcs.Edges(), flow_results) if flow >= 0.01
+            edge for edge, flow in zip(self.gcs.Edges(), flow_results) if flow > 0.0
         ]
         if not_tight:
             # gen random paths
@@ -837,7 +840,7 @@ class GCSforBlocks:
                         e.AddPhiConstraint(False)
                 self.solve(use_convex_relaxation=False, max_rounded_paths=0, verbose=False)
                 active_edges = [
-                    edge for edge, flow in zip(self.gcs.Edges(), flow_results) if flow >= 0.01
+                    edge for edge, flow in zip(self.gcs.Edges(), flow_results) if flow > 0.0
                 ]
                 v_path, _ = self.find_path_to_target(active_edges, self.name_to_vertex["start"])
                 v_name_path = [v.name() for v in v_path]

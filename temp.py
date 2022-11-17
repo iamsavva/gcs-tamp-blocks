@@ -45,7 +45,7 @@ if __name__ == "__main__":
     options.edge_gen = "binary_tree_down" # binary_tree_down
     options.symmetric_set_def = True
     options.rounding_seed = 1
-    options.custom_rounding_paths = 20
+    options.custom_rounding_paths = 30
     
 
     x = timeit()
@@ -53,6 +53,7 @@ if __name__ == "__main__":
     gcs.build_the_graph_simple(start_point, target_point)
     gcs.solve(show_graph=False, verbose=True)
     costs = np.array([ cost for (_, cost) in gcs.get_solution_path()])
+    print(costs)
 
     # INFO("Initial number of v/e is ", len(gcs.gcs.Vertices()), len(gcs.gcs.Edges()))
     # gcs.display_graph()

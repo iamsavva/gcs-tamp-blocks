@@ -86,7 +86,7 @@ class HierarchicalGraph:
         """
         assert self.not_fully_expanded, "Fully expanded and asking to expand a relation!"
         for index, relation in enumerate(self.expanded):
-            if relation is "X": 
+            if relation == "X": 
                 return index, self.expanded[:index] + "Y" + self.expanded[index+1:]
 
     def check_relation_consistency(self, node_name:str) -> bool:
@@ -156,17 +156,70 @@ class HierarchicalGCSAB:
                 next_relation_index, next_expansion = graph.pick_next_relation_to_expand()
                 graph = self.expand_graph(graph, next_relation_index, next_expansion)
 
-
-        
-    def expand_graph(self, graph: HierarchicalGraph, next_relation_index: int, next_expansion: str):
-        assert graph.is_path, "expanding node in a graph that is not a path"
+    
+    def expand_graph(self, old_graph: HierarchicalGraph, next_relation_index: int, next_expansion: str):
+        assert old_graph.is_path, "expanding node in a old_graph that is not a path"
         self.iteration += 1
         start_rels = self.set_gen.construct_rels_representation_from_point(self.start_state.x(), next_expansion)
         target_rels = self.set_gen.construct_rels_representation_from_point(self.target_state.x(), next_expansion)
         start_relation = start_rels[next_relation_index]
         target_relation = target_rels[next_relation_index]
-        relation_paths = self.opt.paths_from_to(start_relation, target_relation)
-        new_graph = GraphOfConvexSets()
+
+        graph_path = old_graph.get_path()
+        graph = GraphOfConvexSets()
+
+        start_col_v = None
+        target_col_v = None
+        # expanding all new nodes
+        for node in graph_path:
+            if node == "start":
+                start_col_v = self.add_vertex(graph, self.start_state, "start")
+            elif node == "target":
+                assert target_col_v is not None, "target column is none mate this is wrong"
+                target_vertex = self.add_vertex(graph, self.target_state, "target")
+                self.add_edge(graph, target_col_v, target_vertex, EdgeOptAB.target_edge())
+            else:
+                grounded_start_name = node[:next_relation_index] + start_relation + node[next_relation_index+1:]
+                grounded_start_vertex = self.add_vertex(graph, self.set_gen.get_set_for_rels(grounded_start_name), grounded_start_name)
+                # connect with previous column
+                assert start_col_v is not None
+                if start_col_v.name() == "start":
+                    self.add_edge(graph, start_col_v, grounded_start_vertex, EdgeOptAB.equality_edge())
+                else:
+                    self.add_edge(graph, start_col_v, grounded_start_vertex, EdgeOptAB.move_edge())
+                start_col_v = grounded_start_vertex
+
+                if start_relation == target_relation:
+                    target_col_v = start_col_v
+                    continue
+                elif target_relation in self.opt.rel_nbhd[start_relation]:
+                    grounded_target_name = node[:next_relation_index] + target_relation + node[next_relation_index+1:]
+                    grounded_target_vertex = self.add_vertex(graph, self.set_gen.get_set_for_rels(grounded_target_name), grounded_target_name)
+                    self.add_edge(graph, grounded_start_vertex, grounded_target_vertex, EdgeOptAB.move_edge())
+                    if target_col_v is not None:
+                        self.add_edge(graph, target_col_v, grounded_target_vertex, EdgeOptAB.move_edge())
+                    target_col_v = grounded_target_vertex
+                else:
+                    nbh = self.opt.rel_nbhd[start_relation]
+                    grounded_nbh_0_name = node[:next_relation_index] + nbh[0] + node[next_relation_index+1:]
+                    grounded_nbh_1_name = node[:next_relation_index] + nbh[1] + node[next_relation_index+1:]
+                    grounded_nbh_0_vertex = self.add_vertex(graph, self.set_gen.get_set_for_rels(grounded_nbh_0_name), grounded_nbh_0_name)
+                    grounded_nbh_1_vertex = self.add_vertex(graph, self.set_gen.get_set_for_rels(grounded_nbh_1_name), grounded_nbh_1_name)
+                    grounded_target_name = node[:next_relation_index] + target_relation + node[next_relation_index+1:]
+                    grounded_target_vertex = self.add_vertex(graph, self.set_gen.get_set_for_rels(grounded_target_name), grounded_target_name)
+
+                    self.add_edge(graph, grounded_start_vertex, grounded_nbh_0_vertex, EdgeOptAB.move_edge())
+                    self.add_edge(graph, grounded_start_vertex, grounded_nbh_1_vertex, EdgeOptAB.move_edge())
+                    self.add_edge(graph, grounded_nbh_0_vertex, grounded_target_vertex, EdgeOptAB.move_edge())
+                    self.add_edge(graph, grounded_nbh_1_vertex, grounded_target_vertex, EdgeOptAB.move_edge())
+
+                    if target_col_v is not None:
+                        self.add_edge(graph, target_col_v, grounded_target_vertex, EdgeOptAB.move_edge())
+                    target_col_v = grounded_target_vertex
+
+        return HierarchicalGraph(graph, old_graph.cost, next_expansion, self.iteration)
+
+        
 
 
 
@@ -182,7 +235,7 @@ class HierarchicalGCSAB:
         xxx_vertex = self.add_vertex(graph, xxx_set, xxx_rels)
         # start -> know_nothing -> target
         self.add_edge(graph, start_vertex, xxx_vertex, EdgeOptAB.equality_edge())
-        self.add_edge(graph, xxx_vertex, target_vertex, EdgeOptAB.move_edge())
+        self.add_edge(graph, xxx_vertex, target_vertex, EdgeOptAB.target_edge())
         # return the useful hierarchical graph representation
         return HierarchicalGraph(graph, float("inf"), xxx_rels, self.iteration)
 

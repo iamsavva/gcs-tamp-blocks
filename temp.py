@@ -17,10 +17,10 @@ from pydrake.geometry.optimization import (  # pylint: disable=import-error
 from draw_2d import Draw2DSolution
 
 if __name__ == "__main__":
-    nb = 2
-    ubf = 2.0
-    start_point = Point( np.array([1,1, 1,2]))
-    target_point = Point(np.array([1,2, 1,1]))
+    # nb = 2
+    # ubf = 2.0
+    # start_point = Point( np.array([1,1, 1,2]))
+    # target_point = Point(np.array([1,2, 1,1]))
 
     nb = 3
     ubf = 4.0
@@ -31,9 +31,11 @@ if __name__ == "__main__":
     hg = HierarchicalGCSAB(options)
     hg.start_state = start_point
     hg.target_state = target_point
-    g_init = hg.get_initial_graph()
-    # g_init.display_graph()
-    # print(g_init.pick_next_relation_to_expand())
+    graph = hg.get_initial_graph()
+    next_relation_index, next_expansion = graph.pick_next_relation_to_expand()
+    graph = hg.expand_graph(graph, next_relation_index, next_expansion)
+    graph.display_graph()
+    # print(g_init.get_path())
 
 
 

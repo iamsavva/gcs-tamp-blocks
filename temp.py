@@ -29,12 +29,15 @@ if __name__ == "__main__":
 
     options = GCSforAutonomousBlocksOptions(nb, ubf=ubf)
     hg = HierarchicalGCSAB(options)
-    hg.start_state = start_point
-    hg.target_state = target_point
-    graph = hg.get_initial_graph()
-    next_relation_index, next_expansion = graph.pick_next_relation_to_expand()
-    graph = hg.expand_graph(graph, next_relation_index, next_expansion)
-    graph.display_graph()
+
+    hg.solve(start_point, target_point)
+
+    # hg.start_state = start_point
+    # hg.target_state = target_point
+    # graph = hg.get_initial_graph()
+    # next_relation_index, next_expansion = graph.pick_next_relation_to_expand()
+    # graph = hg.expand_graph(graph, next_relation_index, next_expansion)
+    # graph.display_graph()
     # print(g_init.get_path())
 
 

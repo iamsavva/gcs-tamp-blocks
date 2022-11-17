@@ -38,7 +38,7 @@ class Draw2DSolution:
         vertex_solution: T.List[T.List],
         goal,
         fast: bool = True,
-        no_arm = False,
+        no_arm=False,
     ):
         self.no_arm = no_arm
         self.num_modes = num_modes
@@ -130,7 +130,7 @@ class Draw2DSolution:
             time.sleep(1.0)
 
     def move_from_to(self, state_now, state_next):
-        delta = state_next - state_now    
+        delta = state_next - state_now
         distance = np.linalg.norm(delta[0:2])
         if self.no_arm:
             distance = np.linalg.norm(delta)

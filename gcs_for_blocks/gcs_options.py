@@ -52,6 +52,7 @@ class EdgeOptAB:
     """
     Option class for edge connectivity.
     """
+
     # right point belongs to same set as left point
     add_set_transition_constraint = False
     # right point equal to left point
@@ -80,6 +81,7 @@ class EdgeOptAB:
     @staticmethod
     def target_edge() -> "EdgeOptAB":
         return EdgeOptAB(False, False, True)
+
 
 class EdgeOptions:
     """
@@ -257,15 +259,15 @@ class GCSforBlocksOptions:
 class GCSforAutonomousBlocksOptions(GCSforBlocksOptions):
 
     rels = ["A", "B", "L", "R"]
-    rel_inverse = {"A": "B", "B":"A", "L":"R", "R":"L"}
-    rel_nbhd = {"A": ["L", "R"], "B":["L", "R"], "L":["A", "B"], "R":["A", "B"]}
-    rel_iterator = {"A": "B", "B":"L", "L":"R", "R":"A"}
+    rel_inverse = {"A": "B", "B": "A", "L": "R", "R": "L"}
+    rel_nbhd = {"A": ["L", "R"], "B": ["L", "R"], "L": ["A", "B"], "R": ["A", "B"]}
+    rel_iterator = {"A": "B", "B": "L", "L": "R", "R": "A"}
 
-    # @property
+    @property
     def rel_inv(self, letter) -> str:
         return self.rel_inverse[letter]
 
-    # @property
+    @property
     def rel_iter(self, letter) -> str:
         return self.rel_iterator[letter]
 
@@ -276,6 +278,18 @@ class GCSforAutonomousBlocksOptions(GCSforBlocksOptions):
     @property
     def rels_len(self) -> int:
         return int((self.num_blocks - 1) * self.num_blocks / 2)
+
+    def paths_from_to(self, start_relation, target_relation):
+        if start_relation == target_relation:
+            return [[start_relation]]
+        elif target_relation in self.rel_nbhd[start_relation]:
+            return [[start_relation, target_relation]]
+        else:
+            paths = []
+            for relation in self.rel_nbhd[start_relation]:
+                paths += [ [start_relation, relation, target_relation] ]
+            return paths
+
 
     @property
     def num_modes(self) -> int:

@@ -32,7 +32,6 @@ from .set_tesselation_2d import SetTesselation
 from .gcs import GCSforBlocks
 
 
-
 class GCSAutonomousBlocks(GCSforBlocks):
     """
     GCS for N-dimensional block moving using a top-down suction cup.
@@ -83,12 +82,16 @@ class GCSAutonomousBlocks(GCSforBlocks):
         self.add_vertex(target_state, "target")
 
         ############################
-        start_set_string = self.set_gen.construct_rels_representation_from_point(start_state.x())
+        start_set_string = self.set_gen.construct_rels_representation_from_point(
+            start_state.x()
+        )
         start_set = self.set_gen.rels2set[start_set_string]
         self.add_vertex(start_set, start_set_string)
         self.connect_vertices("start", start_set_string, EdgeOptAB.equality_edge())
 
-        target_set_string = self.set_gen.construct_rels_representation_from_point(target_state.x())
+        target_set_string = self.set_gen.construct_rels_representation_from_point(
+            target_state.x()
+        )
         target_set = self.set_gen.rels2set[target_set_string]
         self.add_vertex(target_set, target_set_string)
         self.connect_vertices(target_set_string, "target", EdgeOptAB.target_edge())
@@ -104,7 +107,7 @@ class GCSAutonomousBlocks(GCSforBlocks):
                     self.add_vertex(self.set_gen.rels2set[nbh], nbh)
                     self.connect_vertices(rels, nbh, EdgeOptAB.move_edge())
                     num_edges += 1
-                    
+
         elif self.opt.edge_gen == "binary_tree_down":
             already_added = set()
             already_added.add(start_set_string)
@@ -117,7 +120,9 @@ class GCSAutonomousBlocks(GCSforBlocks):
                     # find neighbours of f
 
                     # nbhd = self.set_gen.get_1_step_neighbours(f)
-                    nbhd = self.set_gen.get_useful_1_step_neighbours(f, target_set_string)
+                    nbhd = self.set_gen.get_useful_1_step_neighbours(
+                        f, target_set_string
+                    )
                     for nbh in nbhd:
                         # for each neighbour: if it's not in current / previous layers -- add it
                         if nbh not in already_added:
@@ -126,12 +131,12 @@ class GCSAutonomousBlocks(GCSforBlocks):
                                 self.connect_vertices(f, nbh, EdgeOptAB.move_edge())
                                 next_frontier.add(nbh)
                                 num_edges += 1
-            
+
                 frontier = next_frontier.copy()
                 already_added = already_added.union(next_frontier)
                 next_frontier = set()
         else:
-            raise Exception("Inapproprate edge gen: " + self.opt.edge_gen) 
+            raise Exception("Inapproprate edge gen: " + self.opt.edge_gen)
 
         print("num edges is ", num_edges)
 
@@ -191,8 +196,8 @@ class GCSAutonomousBlocks(GCSforBlocks):
             d = self.opt.block_dim
             n = self.opt.state_dim
             A = np.zeros((d, 2 * n))
-            A[:, i*d:i*d+d] = np.eye(d)
-            A[:, n+i*d: n+i*d+d] = -np.eye(d)
+            A[:, i * d : i * d + d] = np.eye(d)
+            A[:, n + i * d : n + i * d + d] = -np.eye(d)
             b = np.zeros(d)
             # add the cost
             cost = L2NormCost(A, b)
@@ -201,12 +206,11 @@ class GCSAutonomousBlocks(GCSforBlocks):
     def add_full_movement_cost(self, edge):
         xu, xv = edge.xu(), edge.xv()
         n = self.opt.state_dim
-        A = np.hstack( (np.eye(n), -np.eye(n)) )
+        A = np.hstack((np.eye(n), -np.eye(n)))
         b = np.zeros(n)
         # add the cost
         cost = L2NormCost(A, b)
         edge.AddCost(Binding[L2NormCost](cost, np.append(xv, xu)))
-
 
     ###################################################################################
 

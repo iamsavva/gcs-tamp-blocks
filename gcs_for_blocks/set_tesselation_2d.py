@@ -15,89 +15,92 @@ from tqdm import tqdm
 class SetTesselation:
     def __init__(self, options: GCSforAutonomousBlocksOptions):
         self.opt = options
-        self.sets_in_dir_representation = self.get_sets_in_dir_representation()
+        self.sets_in_rels_representation = self.get_sets_in_rels_representation()
 
-        self.index2block_rel = dict()  # T.Dict[int, (int,int)]
+        self.index2relation = dict()  # T.Dict[int, (int,int)]
         self.make_index_to_block_relation()
 
-        self.dir2set = dict()  # T.Dict[str, HPolyhedron]
+        self.rels2set = dict()  # T.Dict[str, HPolyhedron]
         self.generate_sets()
 
-    def get_sets_in_dir_representation(self):
-        return all_possible_combinations_of_items(self.opt.dirs, self.opt.set_spec_len)
+    def get_sets_in_rels_representation(self):
+        return all_possible_combinations_of_items(self.opt.rels, self.opt.rels_len)
 
     def generate_sets(self):
-        for i in tqdm(range(len(self.sets_in_dir_representation)), "Set generation"):
-            dir_rep = self.sets_in_dir_representation[i]
+        for i in tqdm(range(len(self.sets_in_rels_representation)), "Set generation"):
+            rels_rep = self.sets_in_rels_representation[i]
             # get set
-            set_for_dir_rep = self.gen_set_from_dir_rep(dir_rep)
+            set_for_rels_rep = self.gen_set_from_rels_rep(rels_rep)
             # DO NOT reduce iequalities, some of these sets are empty
             # reducing inequalities is also extremely time consuming
-            # set_for_dir_rep = set_for_dir_rep.ReduceInequalities()
+            # set_for_rels_rep = set_for_rels_rep.ReduceInequalities()
 
             # check that it's non-empty
-            solved, x, r = ChebyshevCenter(set_for_dir_rep)
+            solved, x, r = ChebyshevCenter(set_for_rels_rep)
             if solved and r >= 0.00001:
-                self.dir2set[dir_rep] = set_for_dir_rep
+                self.rels2set[rels_rep] = set_for_rels_rep
             
 
-    def gen_set_from_dir_rep(self, dir_rep: str):
+    def gen_set_from_rels_rep(self, rels_rep: str):
         A, b = self.get_bounding_box_constraint()
-        for index, dir in enumerate(dir_rep):
-            i, j = self.index2block_rel[index]
-            A_dir, b_dir = self.get_constraints_for_direction(dir, i, j)
-            A = np.vstack((A, A_dir))
-            b = np.hstack((b, b_dir))
+        for index, relation in enumerate(rels_rep):
+            i, j = self.index2relation[index]
+            if relation != "X":
+                A_relation, b_relation = self.get_constraints_for_relation(relation, i, j)
+                A = np.vstack((A, A_relation))
+                b = np.hstack((b, b_relation))
         return HPolyhedron(A, b)
 
-    def get_constraints_for_direction(self, dir, i, j):
+    def get_constraints_for_relation(self, relation, i, j):
         if self.opt.symmetric_set_def:
-            return self.get_constraints_for_direction_sym(dir,i,j)
+            return self.get_constraints_for_relation_sym(relation,i,j)
         else:
-            return self.get_constraints_for_direction_asym(dir,i,j)
+            return self.get_constraints_for_relation_asym(relation,i,j)
 
-    def get_constraints_for_direction_asym(self, dir: str, i, j):
+    def get_constraints_for_relation_asym(self, relation: str, i, j):
+        assert relation != "X", "Shouldn't be calling get_constraints_for_relation_asym on X"
         w = self.opt.block_width
         bd = self.opt.block_dim
         A = np.zeros((2, self.opt.state_dim))
-        if dir == "A":
+        if relation == "A":
             A[0, j * bd], A[0, i * bd] = 1, -1
             A[1, j * bd + 1], A[1, i * bd + 1] = 1, -1
             b = np.array([w, -w])
-        elif dir == "B":
+        elif relation == "B":
             A[0, i * bd], A[0, j * bd] = 1, -1
             A[1, i * bd + 1], A[1, j * bd + 1] = 1, -1
             b = np.array([w, -w])
-        elif dir == "L":
+        elif relation == "L":
             A[0, i * bd], A[0, j * bd] = 1, -1
             A[1, j * bd + 1], A[1, i * bd + 1] = 1, -1
             b = np.array([-w, w])
-        elif dir == "R":
+        elif relation == "R":
             A[0, j * bd], A[0, i * bd] = 1, -1
             A[1, i * bd + 1], A[1, j * bd + 1] = 1, -1
             b = np.array([-w, w])
         return A, b
 
-    def get_constraints_for_direction_sym(self, dir: str, i, j):
+    def get_constraints_for_relation_sym(self, relation: str, i, j):
+        assert relation != "X", "Shouldn't be calling get_constraints_for_relation_sym on X"
         w = self.opt.block_width
         bd = self.opt.block_dim
         sd = self.opt.state_dim
         xi, yi = i * bd, i * bd + 1
         xj, yj = j * bd, j * bd + 1
         a0, a1, a2 = np.zeros(sd), np.zeros(sd), np.zeros(sd)
-        if dir == "L":
+        if relation == "L":
             a0[xi], a0[yi], a0[xj], a0[yj] = 1, -1, -1, 1
             a1[xi], a1[yi], a1[xj], a1[yj] = 1, 1, -1, -1
             a2[xi], a2[yi], a2[xj], a2[yj] = 1, 0, -1, 0
-        elif dir == "A":
+        elif relation == "A":
             a0[xi], a0[yi], a0[xj], a0[yj] = 1, -1, -1, 1
             a1[xi], a1[yi], a1[xj], a1[yj] = -1, -1, 1, 1
             a2[xi], a2[yi], a2[xj], a2[yj] = 0, -1, 0, 1
-        elif dir == "R":
+        elif relation == "R":
             a0[xi], a0[yi], a0[xj], a0[yj] = -1, 1, 1, -1
             a1[xi], a1[yi], a1[xj], a1[yj] = -1, -1, 1, 1
             a2[xi], a2[yi], a2[xj], a2[yj] = -1, 0, 1, 0
-        elif dir == "B":
+        elif relation == "B":
             a0[xi], a0[yi], a0[xj], a0[yj] = -1, 1, 1, -1
             a1[xi], a1[yi], a1[xj], a1[yj] = 1, 1, -1, -1
             a2[xi], a2[yi], a2[xj], a2[yj] = 0, 1, 0, -1
@@ -112,15 +115,19 @@ class SetTesselation:
 
     def make_index_to_block_relation(self):
         """
-        01 02 03 .. 0n-1
-        12 13 14    1n-1
-        ...
-        n-2 n-1
+        Imagine the matrix of relations: 1-n against 1-n
+        There are a total of n-1 relations
+        0,1  0,2  0,3 .. 0,n-1
+             1,2  1,3 .. 1,n-1
+                      ..
+                      ..
+                         n-2,n-1
+        index of the relation is sequential, goes left to right and down.
         """
         st = [0, 1]
         index = 0
-        while index < self.opt.set_spec_len:
-            self.index2block_rel[index] = (st[0], st[1])
+        while index < self.opt.rels_len:
+            self.index2relation[index] = (st[0], st[1])
             index += 1
             st[1] += 1
             if st[1] == self.opt.num_blocks:
@@ -128,44 +135,59 @@ class SetTesselation:
                 st[1] = st[0] + 1
         assert st == [self.opt.num_blocks - 1, self.opt.num_blocks], "checking my math"
 
-    def construct_dir_representation_from_point(self, point: npt.NDArray)->str:
-        dir_representation = ""
-        for index in range( self.opt.set_spec_len ):
-            i, j = self.index2block_rel[index]
-            for dir in self.opt.dirs:
-                A, b = self.get_constraints_for_direction(dir, i, j)
+    def construct_rels_representation_from_point(self, point: npt.NDArray)->str:
+        """
+        Given a point, find a string of relations for it
+        """
+        rels_representation = ""
+        for index in range( self.opt.rels_len ):
+            i, j = self.index2relation[index]
+            for relation in self.opt.rels:
+                A, b = self.get_constraints_for_relation(relation, i, j)
                 if np.all(A.dot(point) <= b):
-                    dir_representation += dir
+                    rels_representation += relation
                     break
-        assert len(dir_representation) == self.opt.set_spec_len
-        return dir_representation
+        # check yourself -- should have n*(n-1)/2 letters in the representation
+        assert len(rels_representation) == self.opt.rels_len
+        return rels_representation
 
 
-    def get_1_step_neighbours(self, dir:str):
-        assert len(dir) == self.opt.set_spec_len, "inappropriate dir: " + dir
-        ldir = list(dir)
+    def get_1_step_neighbours(self, rels:str):
+        """
+        Get all 1 step neighbours 
+        1-step -- change of a single relation
+        """
+        assert "X" not in rels, "Un-grounded relation in relation string!"
+        assert len(rels) == self.opt.rels_len, "inappropriate relation: " + rels
+        lrels = list(rels)
         nbhd = []
-        for i in range(len(dir)):
-            for j in range(self.opt.num_dirs-1):
-                ldir[i] = self.opt.dir_iter(ldir[i])
-                if self.opt.dir_inv(dir[i]) != ldir[i] and ''.join(ldir) in self.dir2set:
-                    nbhd += [''.join(ldir)]
-            ldir[i] = self.opt.dir_iter(ldir[i])
+        for i in range(len(rels)):
+            for j in range(self.opt.number_of_relations-1):
+                lrels[i] = self.opt.rel_iter(lrels[i])
+                if self.opt.rel_inv(rels[i]) != lrels[i] and ''.join(lrels) in self.rels2set:
+                    nbhd += [''.join(lrels)]
+            lrels[i] = self.opt.rel_iter(lrels[i])
         return nbhd
 
-    def get_useful_1_step_neighbours(self, dir:str, target:str):
-        assert len(dir) == self.opt.set_spec_len, "inappropriate dir: " + dir
-        assert len(target) == self.opt.set_spec_len, "inappropriate target: " + target
+    def get_useful_1_step_neighbours(self, rels: str, target:str):
+        """
+        Get 1-stop neighbours that are relevant given the target node
+        1-step -- change in a single relation
+        relevant to target -- if relation in relation is already same as in target, don't change it 
+        """
+        assert "X" not in rels, "Un-grounded relation in relation string! " + rels
+        assert len(rels) == self.opt.rels_len, "Wrong num of relations: " + rels
+        assert len(target) == self.opt.rels_len, "Wrong num of relations in target: " + target
 
         nbhd = []
-        for i in range(len(dir)):
-            if dir[i] == target[i]:
+        for i in range(len(rels)):
+            if rels[i] == target[i]:
                 continue
-            elif target[i] in self.opt.dir_nbhd[dir[i]]:
-                nbhd += [dir[:i] + target[i] + dir[i+1:]]
+            elif target[i] in self.opt.rel_nbhd[rels[i]]:
+                nbhd += [rels[:i] + target[i] + rels[i+1:]]
             else:
-                for let in self.opt.dir_nbhd[dir[i]]:
-                    nbhd += [dir[:i] + let + dir[i+1:]]
+                for let in self.opt.rel_nbhd[rels[i]]:
+                    nbhd += [rels[:i] + let + rels[i+1:]]
         return nbhd
 
 

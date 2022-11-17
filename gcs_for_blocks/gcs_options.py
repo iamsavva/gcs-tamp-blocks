@@ -256,25 +256,25 @@ class GCSforBlocksOptions:
 
 class GCSforAutonomousBlocksOptions(GCSforBlocksOptions):
 
-    dirs = ["A", "B", "L", "R"]
-    dir_inverse = {"A": "B", "B":"A", "L":"R", "R":"L"}
-    dir_nbhd = {"A": ["L", "R"], "B":["L", "R"], "L":["A", "B"], "R":["A", "B"]}
-    dir_iterator = {"A": "B", "B":"L", "L":"R", "R":"A"}
+    rels = ["A", "B", "L", "R"]
+    rel_inverse = {"A": "B", "B":"A", "L":"R", "R":"L"}
+    rel_nbhd = {"A": ["L", "R"], "B":["L", "R"], "L":["A", "B"], "R":["A", "B"]}
+    rel_iterator = {"A": "B", "B":"L", "L":"R", "R":"A"}
 
     # @property
-    def dir_inv(self, letter) -> str:
-        return self.dir_inverse[letter]
+    def rel_inv(self, letter) -> str:
+        return self.rel_inverse[letter]
 
     # @property
-    def dir_iter(self, letter) -> str:
-        return self.dir_iterator[letter]
+    def rel_iter(self, letter) -> str:
+        return self.rel_iterator[letter]
 
     @property
-    def num_dirs(self) -> int:
-        return len(self.dirs)
+    def number_of_relations(self) -> int:
+        return len(self.rels)
 
     @property
-    def set_spec_len(self) -> int:
+    def rels_len(self) -> int:
         return int((self.num_blocks - 1) * self.num_blocks / 2)
 
     @property

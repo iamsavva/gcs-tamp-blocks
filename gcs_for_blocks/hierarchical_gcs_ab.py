@@ -31,9 +31,20 @@ from .gcs_options import GCSforAutonomousBlocksOptions, EdgeOptAB
 from .set_tesselation_2d import SetTesselation
 from .gcs import GCSforBlocks
 
+class HierarchicalGraph:
+
+    @property
+    def is_path(self) -> bool:
+        return (len(self.gcs.Vertices()) == len(self.gcs.Edges()) + 1)
+
+    def __init__(self, options, gcs: GraphOfConvexSets, cost: float, expanded:str,  iteration: int):
+        self.gcs = gcs
+        self.cost = cost 
+        self.iteration = iteration
+        self.expanded = expanded
 
 
-class GCSAutonomousBlocks(GCSforBlocks):
+class HierarchicalGCSAB:
     """
     GCS for N-dimensional block moving using a top-down suction cup.
     """
@@ -47,8 +58,8 @@ class GCSAutonomousBlocks(GCSforBlocks):
 
         # init the graph
         self.gcs = GraphOfConvexSets()
-        self.graph_built = False
-        self.solution = None
+        # self.graph_built = False
+        # self.solution = None
 
         self.set_gen = SetTesselation(options)
 
@@ -56,24 +67,25 @@ class GCSAutonomousBlocks(GCSforBlocks):
         self.name_to_vertex = dict()  # T.Dict[str, GraphOfConvexSets.Vertex]
         print("finished init")
 
-    def build_the_graph_simple(
-        self,
-        start_state: Point,
-        target_state: Point,
-    ) -> None:
-        """
-        Build the GCS graph of horizon H from start to target nodes.
-        TODO:
-        - allow target state to be a set
-        """
-        # reset the graph
-        self.gcs = GraphOfConvexSets()
-        self.graph_built = False
 
-        # add all edges
-        self.add_everything(start_state, target_state)
 
-        self.graph_built = True
+    def solve(self, start_state: Point, target_state: Point) -> None:
+        # initialize the graph
+        graph = GraphOfConvexSets()
+        self.add_vertex(graph, start_state, "start")
+        self.add_vertex(graph, target_state, "target")
+        self.add_vertex()
+
+
+    def add_vertex(self, graph: GraphOfConvexSets, convex_set: HPolyhedron, name: str) -> None:
+        """
+        Define a vertex with a convex set.
+        """
+        # check myself
+        vertex_names = [v.name() for v in graph.Vertices()]
+        assert name not in vertex_names, "Adding vertex again! Vertex: " + name + "\nAlready in: " + str(vertex_names)    
+        graph.AddVertex(convex_set, name)
+
 
     ###################################################################################
     # Adding layers of nodes (trellis diagram style)
@@ -83,26 +95,26 @@ class GCSAutonomousBlocks(GCSforBlocks):
         self.add_vertex(target_state, "target")
 
         ############################
-        start_set_string = self.set_gen.construct_rels_representation_from_point(start_state.x())
-        start_set = self.set_gen.rels2set[start_set_string]
+        start_set_string = self.set_gen.construct_dir_representation_from_point(start_state.x())
+        start_set = self.set_gen.dir2set[start_set_string]
         self.add_vertex(start_set, start_set_string)
         self.connect_vertices("start", start_set_string, EdgeOptAB.equality_edge())
 
-        target_set_string = self.set_gen.construct_rels_representation_from_point(target_state.x())
-        target_set = self.set_gen.rels2set[target_set_string]
+        target_set_string = self.set_gen.construct_dir_representation_from_point(target_state.x())
+        target_set = self.set_gen.dir2set[target_set_string]
         self.add_vertex(target_set, target_set_string)
         self.connect_vertices(target_set_string, "target", EdgeOptAB.target_edge())
 
         num_edges = 2
 
         if self.opt.edge_gen == "all":
-            for rels in self.set_gen.rels2set:
-                self.add_vertex(self.set_gen.rels2set[rels], rels)
-                nbhd = self.set_gen.get_1_step_neighbours(rels)
+            for dir in self.set_gen.dir2set:
+                self.add_vertex(self.set_gen.dir2set[dir], dir)
+                nbhd = self.set_gen.get_1_step_neighbours(dir)
 
                 for nbh in nbhd:
-                    self.add_vertex(self.set_gen.rels2set[nbh], nbh)
-                    self.connect_vertices(rels, nbh, EdgeOptAB.move_edge())
+                    self.add_vertex(self.set_gen.dir2set[nbh], nbh)
+                    self.connect_vertices(dir, nbh, EdgeOptAB.move_edge())
                     num_edges += 1
                     
         elif self.opt.edge_gen == "binary_tree_down":
@@ -121,8 +133,8 @@ class GCSAutonomousBlocks(GCSforBlocks):
                     for nbh in nbhd:
                         # for each neighbour: if it's not in current / previous layers -- add it
                         if nbh not in already_added:
-                            if nbh in self.set_gen.rels2set:
-                                self.add_vertex(self.set_gen.rels2set[nbh], nbh)
+                            if nbh in self.set_gen.dir2set:
+                                self.add_vertex(self.set_gen.dir2set[nbh], nbh)
                                 self.connect_vertices(f, nbh, EdgeOptAB.move_edge())
                                 next_frontier.add(nbh)
                                 num_edges += 1
@@ -156,7 +168,7 @@ class GCSAutonomousBlocks(GCSforBlocks):
         # Adding constraints
         # -----------------------------------------------------------------
         if edge_opt.add_set_transition_constraint:
-            left_set = self.set_gen.rels2set[left_vertex.name()]
+            left_set = self.set_gen.dir2set[left_vertex.name()]
             self.add_common_set_at_transition_constraint(left_set, edge)
         if edge_opt.add_equality_constraint:
             self.add_point_equality_constraint(edge)

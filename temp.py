@@ -26,17 +26,17 @@ if __name__ == "__main__":
     # start_point = Point( np.array([1,1, 1,2]))
     # target_point = Point(np.array([1,2, 1,1]))
 
-    # nb = 3
-    # ubf = 4.0
-    # start_point = Point(np.array([1,1, 1,2, 1,3]))
-    # target_point = Point(np.array([3,3, 3,1, 3,2]))
+    nb = 3
+    ubf = 4.0
+    start_point = Point(np.array([1,1, 1,2, 1,3]))
+    target_point = Point(np.array([3,3, 3,1, 3,2]))
 
     # # 5.31 5.27 
 
-    nb = 4
-    ubf = 4.0
-    start_point = Point(np.array([1,1, 1,2, 1,3, 1,4]))
-    target_point = Point(np.array([3,4, 3,3, 3,2, 3,1]))
+    # nb = 4
+    # ubf = 4.0
+    # start_point = Point(np.array([1,1, 1,2, 1,3, 1,4]))
+    # target_point = Point(np.array([3,4, 3,3, 3,2, 3,1]))
 
     options = GCSforAutonomousBlocksOptions(nb, ubf = ubf)
     options.use_convex_relaxation = True

@@ -39,12 +39,18 @@ class HierarchicalGraph:
         return "X" in self.expanded
 
     @property
+    def bad_graph(self) -> bool:
+        return len(self.gcs.Vertices()) == len(self.gcs.Edges()) + 1
+
+    @property
     def is_path(self) -> bool:
         return len(self.gcs.Vertices()) == len(self.gcs.Edges()) + 1
 
     @property
     def is_not_path(self) -> bool:
         return not self.is_path
+
+    
 
     def __init__(
         self,
@@ -57,33 +63,38 @@ class HierarchicalGraph:
     ):
         self.gcs = gcs
         self.cost = cost
-        self.iteration = iteration
         self.expanded = expanded
+        self.iteration = iteration
         self.start_vertex = start_vertex
         self.target_vertex = target_vertex
+        if start_vertex.name() != "start":
+            WARN(str(self.iteration))
+            self.display_graph()
         assert start_vertex.name() == "start"
         assert target_vertex.name() == "target"
 
+    def copy(self):
+        return HierarchicalGraph(self.gcs, self.cost, self.expanded, self.iteration, self.start_vertex, self.target_vertex)
 
     def display_graph(self, graph_name="temp") -> None:
         graphviz = self.gcs.GetGraphvizString()
         data = pydot.graph_from_dot_data(graphviz)[0]  # type: ignore
         data.write_png(graph_name + ".png")
-        data.write_svg(graph_name + ".svg")
+        # data.write_svg(graph_name + ".svg")
 
     def find_path_to_target( self,
         edges: T.List[GraphOfConvexSets.Edge],
-        start: GraphOfConvexSets.Vertex) -> T.List[GraphOfConvexSets.Vertex]:
+        start_vertex) -> T.List[GraphOfConvexSets.Vertex]:
         """Given a set of active edges, find a path from start to target"""
-        current_edge = [e for e in edges if e.u() == start][0]
+        current_edge = [e for e in edges if e.u() == start_vertex][0]
         v = current_edge.v()
         target_reached = v.name() == "target"
         if target_reached:
-            return [start] + [v]
+            return [start_vertex] + [v]
         else:
-            return [start] + self.find_path_to_target(edges, v)
+            return [start_vertex] + self.find_path_to_target(edges, v)
 
-    def get_path(self):
+    def get_path(self) -> T.List[str]:
         assert self.is_path, "Trying to get a path when the graph is not a path " + str(self.iteration) 
         path = []
         v = [v for v in self.gcs.Vertices() if v.name() == "start"][0]
@@ -138,7 +149,7 @@ class HierarchicalGraph:
                     + " ".join(graph_names)
                 )
 
-    def get_solution_path(self, solution) -> T.Tuple[T.List[str], npt.NDArray]:
+    def get_solution_path(self, solution, start_vertex) -> T.Tuple[T.List[str], npt.NDArray]:
         """Given a solved GCS problem, and assuming it's tight, find a path from start to target"""
         # find edges with non-zero flow
         flow_variables = [e.phi() for e in self.gcs.Edges()]
@@ -146,30 +157,37 @@ class HierarchicalGraph:
         active_edges = [
             edge for edge, flow in zip(self.gcs.Edges(), flow_results) if flow > 0.01
         ]
-        return self.find_path_to_target(active_edges, self.start_vertex)
+        return self.find_path_to_target(active_edges, start_vertex)
 
 
     def solve(self, verbose=False):
         options = opt.GraphOfConvexSetsOptions()
         options.convex_relaxation = False
         options.preprocessing = False  # TODO Do I need to deal with this?
+        
+        # start_vertex = None
+        # target_vertex = None
+        # for v in self.gcs.Vertices():
+        #     if v.name() == "start":
+        #         start_vertex = v
+        #     if v.name() == "target":
+        #         target_vertex = v
+        #     if start_vertex is not None and target_vertex is not None:
+        #         break
+        # assert start_vertex is not None and target_vertex is not None
 
         INFO("Solving...", verbose=verbose)
         solution_to_graph = self.gcs.SolveShortestPath(self.start_vertex.id(), self.target_vertex.id(), options)
         if not solution_to_graph.is_success():
-            self.display_graph()
-            raise Exception("Couldn't solve, inspect the graph")
-        solution_vertices = self.get_solution_path(solution_to_graph)
+            WARN("Couldn't solve, inspect the graph")
+            self.display_graph(str(self.iteration))
+            return float('inf'), None
+
+            # self.display_graph()
+            # raise Exception("Couldn't solve, inspect the graph")
+
+        solution_vertices = self.get_solution_path(solution_to_graph, self.start_vertex)
         return solution_to_graph.get_optimal_cost(), solution_vertices
-
-        
-
-
-
-
-
-
-
 
 class HierarchicalGCSAB:
     """
@@ -192,6 +210,7 @@ class HierarchicalGCSAB:
 
         # name to vertex dictionary, populated as we populate the graph with vertices
         self.iteration = 0
+        self.num_solves = 0
 
     def solve(self, start_state: Point, target_state: Point) -> None:
         self.start_state = start_state
@@ -206,11 +225,129 @@ class HierarchicalGCSAB:
                 # expand and implace
                 next_relation_index, next_expansion = graph.pick_next_relation_to_expand()
                 graph = self.expand_graph(graph, next_relation_index, next_expansion)
-            # solve
+
+            self.num_solves += 1
             solution_cost, solution_vertices = graph.solve()
-            solution_graph = self.make_graph_from_vertices(graph, solution_cost, solution_vertices)
+            INFO("Solving at " + str(self.num_solves) + " cost is " + str(solution_cost))
+            
+            if solution_cost != float('inf'):
+                solution_graph = self.make_graph_from_vertices(graph, solution_cost, solution_vertices)
+                # solution_graph.display_graph("s1")
+                assert solution_graph.is_path, "Solution graph is not path"
+                # generate a remainder graph from solution
+                if graph.is_not_path:
+                    rem_graph = self.subtract(graph, solution_graph)
+                else:
+                    # if orinal graph was a path -- subtracting solution split the graph. 
+                    # don't do anything in this scenario.
+                    rem_graph = None
+            
+                # find best rem cost
+                best_rem_index = None
+                best_rem_cost = float('inf')
+                for rem_index in range(len(rem)):
+                    if best_rem_index is None:
+                        best_rem_index = rem_index
+                        best_rem_cost = rem[rem_index].cost
+                    else:
+                        if rem[rem_index].cost < best_rem_cost:
+                            best_rem_index = rem_index
+                            best_rem_cost = rem[rem_index].cost
+                
+                # add rem_graph to rems
+                if rem_graph is not None:
+                    if not rem_graph.bad_graph:
+                        rem += [rem_graph]
+
+            # if rem_graph.iteration == 41:
+            #     graph.display_graph("g")
+            #     rem_graph.display_graph("r")
+            #     solution_graph.display_graph("s")
+            #     return
+                
+            # current solution cost is best
+            if solution_cost < best_rem_cost * 1.0:
+                graph = solution_graph
+                print("best is current")
+            else:
+                assert best_rem_index is not None
+                # need to swap for a different rem
+                graph = rem[best_rem_index]
+                rem = rem[:best_rem_index] + rem[best_rem_index+1:]
+                if solution_cost != float('inf'):
+                    rem += [solution_graph]
+                print("falling back to " + str(graph.iteration))
+
+            best_rem_cost = float('inf')
+            for rem_index in range(len(rem)):
+                if rem[rem_index].cost < best_rem_cost:
+                    best_rem_cost = rem[rem_index].cost
+
+        graph.display_graph("final_solution")
+        YAY("Optimal cost is " + str(graph.cost))
+
+
 
             
+
+
+    def subtract(self, graph: HierarchicalGraph, solution_graph: HierarchicalGraph):
+        # TODO: problem: i am subtracting from previous graph
+        self.iteration += 1
+        rem_edges = []
+        rem_vertices = []
+        path = solution_graph.get_path()
+        rem_graph = graph.copy()
+        # find the right node
+        relation_index = solution_graph.expanded.find('X')-1
+        prev_rel = None
+        for i, node_name in enumerate(path):
+            if node_name not in ("start", "target"):
+                if prev_rel is None:
+                    prev_rel = node_name[relation_index]
+                else:
+                    if prev_rel != node_name[relation_index]:
+                        rem_edges += [path[i-1] + "_" + node_name]
+                        prev_rel = node_name[relation_index]
+        if len(rem_edges) > 2:
+            raise Exception("removing too many edges mate")
+        if len(rem_edges) == 2:
+            rem_vertices += [rem_edges[1][:self.opt.rels_len]]
+        if len(rem_edges) == 0:
+            raise Exception("removing nothing")
+
+        # for node_name in path:
+        #     if node_name not in ("start", "target"):
+        #         edges_in_and_out = []
+        #         vertex_in_and_out = None
+        #         for e in rem_graph.gcs.Edges():
+        #             if e.u().name() == node_name:
+        #                 vertex_in_and_out = e.u()
+        #                 edges_in_and_out += [e]
+        #             elif e.v().name() == node_name:
+        #                 edges_in_and_out += [e]
+        #         num_edges_in_and_out = len(edges_in_and_out)
+        #         if num_edges_in_and_out == 2:
+        #             for e in edges_in_and_out:
+        #                 rem_edges.add(e)
+        #             rem_vertices.add(vertex_in_and_out)
+        #         elif num_edges_in_and_out < 2:
+        #             raise Exception("very few edges???")
+
+        for e_name in rem_edges:
+            for e in rem_graph.gcs.Edges():
+                if e.name() == e_name:
+                    rem_graph.gcs.RemoveEdge(e)
+                    break
+        for v_name in rem_vertices:
+            for v in rem_graph.gcs.Vertices():
+                if v.name() == v_name:
+                    rem_graph.gcs.RemoveVertex(v)
+                    break
+            
+        rem_graph.cost = solution_graph.cost + 0.0001
+        rem_graph.iteration = self.iteration
+        return rem_graph
 
 
     def make_graph_from_vertices(self, graph, solution_cost, solution_vertices):
@@ -301,6 +438,12 @@ class HierarchicalGCSAB:
                     if target_col_v is not None:
                         self.add_edge(graph, target_col_v, grounded_target_vertex, EdgeOptAB.move_edge())
                     target_col_v = grounded_target_vertex
+        
+        # for v in graph.Vertices():
+        #     if v not in ("start", "target"):
+        #         if v.name() not in self.set_gen.rels2set:
+        #             graph.RemoveVertex(v)
+                    # TODO: this is much more complicated, investigate
 
         return HierarchicalGraph(graph, old_graph.cost, next_expansion, self.iteration, start_vertex, target_vertex)
 

@@ -26,7 +26,7 @@ from pydrake.solvers import (  # pylint: disable=import-error, unused-import
     LinearCost,
 )
 
-from .util import ERROR, WARN, INFO, YAY
+from .util import ERROR, WARN, INFO, YAY, timeit
 from .gcs_options import GCSforAutonomousBlocksOptions, EdgeOptAB
 from .set_tesselation_2d import SetTesselation
 from .gcs import GCSforBlocks
@@ -50,8 +50,6 @@ class HierarchicalGraph:
     def is_not_path(self) -> bool:
         return not self.is_path
 
-    
-
     def __init__(
         self,
         gcs: GraphOfConvexSets,
@@ -74,13 +72,15 @@ class HierarchicalGraph:
         assert target_vertex.name() == "target"
 
     def copy(self):
+        # TODO: this doesn't do jack shit
+        # better graph construction that doesn't fuck up a previous graph?
+        # it's actually ok to fuck up the previous graph and remove vertices; implace it
         return HierarchicalGraph(self.gcs, self.cost, self.expanded, self.iteration, self.start_vertex, self.target_vertex)
 
     def display_graph(self, graph_name="temp") -> None:
         graphviz = self.gcs.GetGraphvizString()
         data = pydot.graph_from_dot_data(graphviz)[0]  # type: ignore
         data.write_png(graph_name + ".png")
-        # data.write_svg(graph_name + ".svg")
 
     def find_path_to_target( self,
         edges: T.List[GraphOfConvexSets.Edge],
@@ -96,6 +96,8 @@ class HierarchicalGraph:
 
     def get_path(self) -> T.List[str]:
         assert self.is_path, "Trying to get a path when the graph is not a path " + str(self.iteration) 
+        # TODO: this is redundant
+        # i want faster storage; don't want to iterate through these every time
         path = []
         v = [v for v in self.gcs.Vertices() if v.name() == "start"][0]
         path += [v.name()]
@@ -161,30 +163,31 @@ class HierarchicalGraph:
 
 
     def solve(self, verbose=False):
+        # TODO: 
+        # i only spend 3 seconds outside of this call
+        # can i speed up this bit
+        # can i get a second best path as well for a better estimate of cost to go
+        # is preprocessing on my side? no, 76 vs 95 secs
+
+        # don't solve problems that aren't feasible
+        # problems aren't feasible if a set is empty
+        # i know which sets are empty and which are not -- use chebyshev for this
+        # this requires work for expand 
+
+        # TODO: play with the convex relaxation
+        # TODO: convex relaxation is almost 2x as fast!
         options = opt.GraphOfConvexSetsOptions()
-        options.convex_relaxation = False
+        options.convex_relaxation = True
         options.preprocessing = False  # TODO Do I need to deal with this?
-        
-        # start_vertex = None
-        # target_vertex = None
-        # for v in self.gcs.Vertices():
-        #     if v.name() == "start":
-        #         start_vertex = v
-        #     if v.name() == "target":
-        #         target_vertex = v
-        #     if start_vertex is not None and target_vertex is not None:
-        #         break
-        # assert start_vertex is not None and target_vertex is not None
+        # TODO: make sure this number is dependent on actual number of possible paths
+        options.max_rounded_paths = 50
 
         INFO("Solving...", verbose=verbose)
         solution_to_graph = self.gcs.SolveShortestPath(self.start_vertex.id(), self.target_vertex.id(), options)
         if not solution_to_graph.is_success():
             WARN("Couldn't solve, inspect the graph")
-            self.display_graph(str(self.iteration))
+            # self.display_graph(str(self.iteration))
             return float('inf'), None
-
-            # self.display_graph()
-            # raise Exception("Couldn't solve, inspect the graph")
 
         solution_vertices = self.get_solution_path(solution_to_graph, self.start_vertex)
         return solution_to_graph.get_optimal_cost(), solution_vertices
@@ -203,101 +206,107 @@ class HierarchicalGCSAB:
 
         # init the graph
         self.gcs = GraphOfConvexSets()
-        # self.graph_built = False
-        # self.solution = None
-
         self.set_gen = SetTesselation(options)
 
         # name to vertex dictionary, populated as we populate the graph with vertices
         self.iteration = 0
         self.num_solves = 0
 
+        self.rem = []
+        self.start_state = None
+        self.target_state = None
+        self.graph = None
+        self.solve_dt = 0
+
+    def add_to_rem(self, graph):
+        if len(self.rem) == 0:
+            self.rem = [graph]
+            return
+        i = 0
+        j = len(self.rem)
+        while i < j-1:
+            t = int((i+j)/2)
+            if self.rem[t].cost >= graph.cost:
+                i = t
+            else:
+                j = t
+        if self.rem[i].cost >= graph.cost:
+            self.rem = self.rem[:i+1] + [graph] + self.rem[i+1:]
+        else:
+            self.rem = self.rem[:i] + [graph] + self.rem[i:]
+
     def solve(self, start_state: Point, target_state: Point) -> None:
         self.start_state = start_state
         self.target_state = target_state
         # initialize the graph
-        graph = self.get_initial_graph()
-        rem = []
+        self.graph = self.get_initial_graph()
         # while not a path -- keep expanding
-        while graph.not_fully_expanded or graph.is_not_path:
+
+        full_time = timeit()
+        solve_time = timeit()
+
+        while self.graph.not_fully_expanded or self.graph.is_not_path:
+            # TODO: so you found A fully expanded path, what now? 
+            # TODO: stop expanding only when all graphs in the rem have lower cost
+            # you don't get an optimality certificate until you expand every other path
+
             # graph is a path -- let's expand a relation in it!
-            if graph.is_path:
+            if self.graph.is_path:
                 # expand and implace
-                next_relation_index, next_expansion = graph.pick_next_relation_to_expand()
-                graph = self.expand_graph(graph, next_relation_index, next_expansion)
+                next_relation_index, next_expansion = self.graph.pick_next_relation_to_expand()
+                self.graph = self.expand_graph(next_relation_index, next_expansion)
 
             self.num_solves += 1
-            solution_cost, solution_vertices = graph.solve()
+            solve_time.start()
+            solution_cost, solution_vertices = self.graph.solve()
+            solve_time.end()
             INFO("Solving at " + str(self.num_solves) + " cost is " + str(solution_cost))
-            
-            if solution_cost != float('inf'):
-                solution_graph = self.make_graph_from_vertices(graph, solution_cost, solution_vertices)
-                # solution_graph.display_graph("s1")
-                assert solution_graph.is_path, "Solution graph is not path"
-                # generate a remainder graph from solution
-                if graph.is_not_path:
-                    rem_graph = self.subtract(graph, solution_graph)
-                else:
-                    # if orinal graph was a path -- subtracting solution split the graph. 
-                    # don't do anything in this scenario.
-                    rem_graph = None
-            
-                # find best rem cost
-                best_rem_index = None
-                best_rem_cost = float('inf')
-                for rem_index in range(len(rem)):
-                    if best_rem_index is None:
-                        best_rem_index = rem_index
-                        best_rem_cost = rem[rem_index].cost
-                    else:
-                        if rem[rem_index].cost < best_rem_cost:
-                            best_rem_index = rem_index
-                            best_rem_cost = rem[rem_index].cost
-                
-                # add rem_graph to rems
-                if rem_graph is not None:
-                    if not rem_graph.bad_graph:
-                        rem += [rem_graph]
 
-            # if rem_graph.iteration == 41:
-            #     graph.display_graph("g")
-            #     rem_graph.display_graph("r")
-            #     solution_graph.display_graph("s")
-            #     return
+            if solution_cost == float('inf'):
+                # that problem was infeasible
+                # backtrack
+                self.graph = self.rem[-1]
+                self.rem = self.rem[:-1]
+                continue
                 
+            solution_graph = self.make_graph_from_vertices(self.graph, solution_cost, solution_vertices)
+            # solution_graph.display_graph("s1")
+            assert solution_graph.is_path, "Solution graph is not path"
+            # generate a remainder graph from solution
+            if self.graph.is_not_path:
+                self.subtract(solution_graph)
+            else:
+                self.graph = None
+            
+            # add post-subtracted graph to rems
+            if self.graph is not None and not self.graph.bad_graph:
+                self.add_to_rem(self.graph)
+
             # current solution cost is best
-            if solution_cost < best_rem_cost * 1.0:
-                graph = solution_graph
+            if len(self.rem) == 0 or solution_cost < self.rem[-1].cost * 1.0:
+                self.graph = solution_graph
                 print("best is current")
             else:
-                assert best_rem_index is not None
                 # need to swap for a different rem
-                graph = rem[best_rem_index]
-                rem = rem[:best_rem_index] + rem[best_rem_index+1:]
-                if solution_cost != float('inf'):
-                    rem += [solution_graph]
-                print("falling back to " + str(graph.iteration))
+                self.graph = self.rem[-1]
+                self.rem = self.rem[:-1]
+                self.add_to_rem(solution_graph)
+                print("falling back to " + str(self.graph.iteration))
 
-            best_rem_cost = float('inf')
-            for rem_index in range(len(rem)):
-                if rem[rem_index].cost < best_rem_cost:
-                    best_rem_cost = rem[rem_index].cost
-
-        graph.display_graph("final_solution")
-        YAY("Optimal cost is " + str(graph.cost))
+        full_time.dt("Full run time")
+        solve_time.total("solve time")
+        self.graph.display_graph("final_solution")
+        YAY("Optimal cost is " + str(self.graph.cost))
 
 
+    def subtract(self, solution_graph: HierarchicalGraph):
+        # TODO: more careful subtraction
+        # maintain nodes 1-n in path? knowing which subpaths it does not contain?
 
-            
-
-
-    def subtract(self, graph: HierarchicalGraph, solution_graph: HierarchicalGraph):
-        # TODO: problem: i am subtracting from previous graph
         self.iteration += 1
         rem_edges = []
         rem_vertices = []
         path = solution_graph.get_path()
-        rem_graph = graph.copy()
         # find the right node
         relation_index = solution_graph.expanded.find('X')-1
         prev_rel = None
@@ -316,47 +325,30 @@ class HierarchicalGCSAB:
         if len(rem_edges) == 0:
             raise Exception("removing nothing")
 
-        # for node_name in path:
-        #     if node_name not in ("start", "target"):
-        #         edges_in_and_out = []
-        #         vertex_in_and_out = None
-        #         for e in rem_graph.gcs.Edges():
-        #             if e.u().name() == node_name:
-        #                 vertex_in_and_out = e.u()
-        #                 edges_in_and_out += [e]
-        #             elif e.v().name() == node_name:
-        #                 edges_in_and_out += [e]
-        #         num_edges_in_and_out = len(edges_in_and_out)
-        #         if num_edges_in_and_out == 2:
-        #             for e in edges_in_and_out:
-        #                 rem_edges.add(e)
-        #             rem_vertices.add(vertex_in_and_out)
-        #         elif num_edges_in_and_out < 2:
-        #             raise Exception("very few edges???")
-
         for e_name in rem_edges:
-            for e in rem_graph.gcs.Edges():
+            for e in self.graph.gcs.Edges():
                 if e.name() == e_name:
-                    rem_graph.gcs.RemoveEdge(e)
+                    self.graph.gcs.RemoveEdge(e)
                     break
         for v_name in rem_vertices:
-            for v in rem_graph.gcs.Vertices():
+            for v in self.graph.gcs.Vertices():
                 if v.name() == v_name:
-                    rem_graph.gcs.RemoveVertex(v)
+                    self.graph.gcs.RemoveVertex(v)
                     break
             
-        rem_graph.cost = solution_graph.cost + 0.0001
-        rem_graph.iteration = self.iteration
-        return rem_graph
+        self.graph.cost = solution_graph.cost + 0.0001
+        self.graph.iteration = self.iteration
 
 
     def make_graph_from_vertices(self, graph, solution_cost, solution_vertices):
+        # do i need to
+        # option 2: instead store which edges are active and which ones are not
+        # in an array
+        # though this may get somewhat messy...
+        # can't remove edges, but can always add more
+
         solution_expanded = graph.expanded
         solution_iteration = graph.iteration
-
-        # gcs: GraphOfConvexSets,
-        # start_vertex,
-        # target_vertex
 
         solution_graph = GraphOfConvexSets()
         prev_node = None
@@ -376,15 +368,21 @@ class HierarchicalGCSAB:
                 prev_node = solution_node
         return HierarchicalGraph(solution_graph, solution_cost, solution_expanded, solution_iteration, solution_start_vertex, solution_target_vertex)
 
-    def expand_graph(self, old_graph: HierarchicalGraph, next_relation_index: int, next_expansion: str):
-        assert old_graph.is_path, "expanding node in a old_graph that is not a path"
+    def expand_graph(self, next_relation_index: int, next_expansion: str):
+        # TODO: do not exapnd nodes that are useless 
+        # more efficient way to store individual nodes
+        # don't repeat subgraphs
+        # i need smth like "set all flows to zero, set mine to non-zero"
+
+
+        assert self.graph.is_path, "expanding node in a old_graph that is not a path"
         self.iteration += 1
         start_rels = self.set_gen.construct_rels_representation_from_point(self.start_state.x(), next_expansion)
         target_rels = self.set_gen.construct_rels_representation_from_point(self.target_state.x(), next_expansion)
         start_relation = start_rels[next_relation_index]
         target_relation = target_rels[next_relation_index]
 
-        graph_path = old_graph.get_path()
+        graph_path = self.graph.get_path()
         graph = GraphOfConvexSets()
 
         start_col_v = None
@@ -445,7 +443,7 @@ class HierarchicalGCSAB:
         #             graph.RemoveVertex(v)
                     # TODO: this is much more complicated, investigate
 
-        return HierarchicalGraph(graph, old_graph.cost, next_expansion, self.iteration, start_vertex, target_vertex)
+        return HierarchicalGraph(graph, self.graph.cost, next_expansion, self.iteration, start_vertex, target_vertex)
 
     def get_initial_graph(self):
         graph = GraphOfConvexSets()

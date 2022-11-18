@@ -40,6 +40,8 @@ class timeit:
     def __init__(self):
         self.times = []
         self.times.append(time.time())
+        self.totals = 0
+        self.a_start = None
 
     def dt(self, descriptor=None):
         self.times.append(time.time())
@@ -57,6 +59,23 @@ class timeit:
                 descriptor
                 + " took %.3fs since the start" % (self.times[-1] - self.times[0])
             )
+
+    def start(self):
+        self.a_start = time.time()
+
+    def end(self):
+        self.totals += time.time() - self.a_start
+        self.a_start = None
+
+    def total(self, descriptor = None):
+        INFO("All " + descriptor
+                + " took %.3fs" % (self.totals)
+            )
+
+
+
+
+
 
 
 from pydrake.solvers import MathematicalProgram

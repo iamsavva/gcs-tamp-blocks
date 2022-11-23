@@ -121,10 +121,9 @@ class DiscreteNetworkFlowGraph:
         for e in self.edges.values():
             e.set_cost(np.linalg.norm(e.left.value - e.right.value))
 
-        # solve the problem from s0 to t0
-        self.solve("s0", "t0")
-
-    def solve(self, start: str, target: str):
+    def solve(self, convex_relaxation = True):
+        start = "s0"
+        target = "t0"
         # is this inefficient or not?
         # in practice, shouldn't I build an edge matrix?
         x = timeit()
@@ -133,9 +132,13 @@ class DiscreteNetworkFlowGraph:
 
         # add flow decision variables
         for e in self.edges.values():
-            e.set_var(self.prog.NewContinuousVariables(1, "phi_" + e.name)[0])
-            # add flow 0 to 1 constraint
-            self.prog.AddBoundingBoxConstraint(0.0, 1.0, e.var)
+            if convex_relaxation:
+                e.set_var(self.prog.NewContinuousVariables(1, "phi_" + e.name)[0])
+                # add flow 0 to 1 constraint
+                self.prog.AddBoundingBoxConstraint(0.0, 1.0, e.var)
+            else:
+                e.set_var(self.prog.NewBinaryVariables(1, "phi_" + e.name)[0])
+
 
         for v in self.vertices.values():
             # add vertex potential variables

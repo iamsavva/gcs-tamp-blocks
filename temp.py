@@ -13,7 +13,6 @@ from pydrake.geometry.optimization import (  # pylint: disable=import-error
 )
 
 
-
 from draw_2d import Draw2DSolution
 
 if __name__ == "__main__":
@@ -31,8 +30,8 @@ if __name__ == "__main__":
 
     nb = 4
     ubf = 4.0
-    start_point = Point(np.array([1,1, 1,2, 1,3, 1,4]))
-    target_point = Point(np.array([3,4, 3,3, 3,2, 3,1]))
+    start_point = Point(np.array([1, 1, 1, 2, 1, 3, 1, 4]))
+    target_point = Point(np.array([3, 4, 3, 3, 3, 2, 3, 1]))
 
     options = GCSforAutonomousBlocksOptions(nb, ubf=ubf)
     hg = HierarchicalGCSAB(options)

@@ -67,15 +67,8 @@ class timeit:
         self.totals += time.time() - self.a_start
         self.a_start = None
 
-    def total(self, descriptor = None):
-        INFO("All " + descriptor
-                + " took %.3fs" % (self.totals)
-            )
-
-
-
-
-
+    def total(self, descriptor=None):
+        INFO("All " + descriptor + " took %.3fs" % (self.totals))
 
 
 from pydrake.solvers import MathematicalProgram

@@ -59,8 +59,7 @@ class SetTesselation:
                 b = np.hstack((b, b_relation))
         return HPolyhedron(A, b)
 
-
-    def get_constraints_for_relation(self, relation: str, i:int, j:int):
+    def get_constraints_for_relation(self, relation: str, i: int, j: int):
         if self.opt.symmetric_set_def:
             return self.get_constraints_for_relation_sym(relation, i, j)
         else:
@@ -148,7 +147,9 @@ class SetTesselation:
                 st[1] = st[0] + 1
         assert st == [self.opt.num_blocks - 1, self.opt.num_blocks], "checking my math"
 
-    def construct_rels_representation_from_point(self, point: npt.NDArray, expansion = None) -> str:
+    def construct_rels_representation_from_point(
+        self, point: npt.NDArray, expansion=None
+    ) -> str:
         """
         Given a point, find a string of relations for it
         """

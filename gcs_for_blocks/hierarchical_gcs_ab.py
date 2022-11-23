@@ -57,7 +57,7 @@ class HierarchicalGraph:
         expanded: str,
         iteration: int,
         start_vertex,
-        target_vertex
+        target_vertex,
     ):
         self.gcs = gcs
         self.cost = cost
@@ -75,16 +75,23 @@ class HierarchicalGraph:
         # TODO: this doesn't do jack shit
         # better graph construction that doesn't fuck up a previous graph?
         # it's actually ok to fuck up the previous graph and remove vertices; implace it
-        return HierarchicalGraph(self.gcs, self.cost, self.expanded, self.iteration, self.start_vertex, self.target_vertex)
+        return HierarchicalGraph(
+            self.gcs,
+            self.cost,
+            self.expanded,
+            self.iteration,
+            self.start_vertex,
+            self.target_vertex,
+        )
 
     def display_graph(self, graph_name="temp") -> None:
         graphviz = self.gcs.GetGraphvizString()
         data = pydot.graph_from_dot_data(graphviz)[0]  # type: ignore
         data.write_png(graph_name + ".png")
 
-    def find_path_to_target( self,
-        edges: T.List[GraphOfConvexSets.Edge],
-        start_vertex) -> T.List[GraphOfConvexSets.Vertex]:
+    def find_path_to_target(
+        self, edges: T.List[GraphOfConvexSets.Edge], start_vertex
+    ) -> T.List[GraphOfConvexSets.Vertex]:
         """Given a set of active edges, find a path from start to target"""
         current_edge = [e for e in edges if e.u() == start_vertex][0]
         v = current_edge.v()
@@ -95,7 +102,9 @@ class HierarchicalGraph:
             return [start_vertex] + self.find_path_to_target(edges, v)
 
     def get_path(self) -> T.List[str]:
-        assert self.is_path, "Trying to get a path when the graph is not a path " + str(self.iteration) 
+        assert self.is_path, "Trying to get a path when the graph is not a path " + str(
+            self.iteration
+        )
         # TODO: this is redundant
         # i want faster storage; don't want to iterate through these every time
         path = []
@@ -109,21 +118,22 @@ class HierarchicalGraph:
             path += [v.name()]
         return path
 
-
     def pick_next_relation_to_expand(self) -> T.Tuple[int, str]:
         """
         Simple implementation: just expand relations one by one in order.
         TODO: there are probably much more effective orderings of relation expansions!
         TODO: investigate
         """
-        assert self.not_fully_expanded, "Fully expanded and asking to expand a relation!"
+        assert (
+            self.not_fully_expanded
+        ), "Fully expanded and asking to expand a relation!"
         for index, relation in enumerate(self.expanded):
-            if relation == "X": 
-                return index, self.expanded[:index] + "Y" + self.expanded[index+1:]
+            if relation == "X":
+                return index, self.expanded[:index] + "Y" + self.expanded[index + 1 :]
 
-    def check_relation_consistency(self, node_name:str) -> bool:
+    def check_relation_consistency(self, node_name: str) -> bool:
         """
-        If relation is X in expanded -- it should be X in node; 
+        If relation is X in expanded -- it should be X in node;
         If relation is not X in expanded -- it should be not X in node
         """
         for i, relation in enumerate(node_name):
@@ -151,7 +161,9 @@ class HierarchicalGraph:
                     + " ".join(graph_names)
                 )
 
-    def get_solution_path(self, solution, start_vertex) -> T.Tuple[T.List[str], npt.NDArray]:
+    def get_solution_path(
+        self, solution, start_vertex
+    ) -> T.Tuple[T.List[str], npt.NDArray]:
         """Given a solved GCS problem, and assuming it's tight, find a path from start to target"""
         # find edges with non-zero flow
         flow_variables = [e.phi() for e in self.gcs.Edges()]
@@ -161,9 +173,8 @@ class HierarchicalGraph:
         ]
         return self.find_path_to_target(active_edges, start_vertex)
 
-
     def solve(self, verbose=False):
-        # TODO: 
+        # TODO:
         # i only spend 3 seconds outside of this call
         # can i speed up this bit
         # can i get a second best path as well for a better estimate of cost to go
@@ -172,7 +183,7 @@ class HierarchicalGraph:
         # don't solve problems that aren't feasible
         # problems aren't feasible if a set is empty
         # i know which sets are empty and which are not -- use chebyshev for this
-        # this requires work for expand 
+        # this requires work for expand
 
         # TODO: play with the convex relaxation
         # TODO: convex relaxation is almost 2x as fast!
@@ -183,14 +194,17 @@ class HierarchicalGraph:
         options.max_rounded_paths = 50
 
         INFO("Solving...", verbose=verbose)
-        solution_to_graph = self.gcs.SolveShortestPath(self.start_vertex.id(), self.target_vertex.id(), options)
+        solution_to_graph = self.gcs.SolveShortestPath(
+            self.start_vertex.id(), self.target_vertex.id(), options
+        )
         if not solution_to_graph.is_success():
             WARN("Couldn't solve, inspect the graph")
             # self.display_graph(str(self.iteration))
-            return float('inf'), None
+            return float("inf"), None
 
         solution_vertices = self.get_solution_path(solution_to_graph, self.start_vertex)
         return solution_to_graph.get_optimal_cost(), solution_vertices
+
 
 class HierarchicalGCSAB:
     """
@@ -224,14 +238,14 @@ class HierarchicalGCSAB:
             return
         i = 0
         j = len(self.rem)
-        while i < j-1:
-            t = int((i+j)/2)
+        while i < j - 1:
+            t = int((i + j) / 2)
             if self.rem[t].cost >= graph.cost:
                 i = t
             else:
                 j = t
         if self.rem[i].cost >= graph.cost:
-            self.rem = self.rem[:i+1] + [graph] + self.rem[i+1:]
+            self.rem = self.rem[: i + 1] + [graph] + self.rem[i + 1 :]
         else:
             self.rem = self.rem[:i] + [graph] + self.rem[i:]
 
@@ -246,30 +260,37 @@ class HierarchicalGCSAB:
         solve_time = timeit()
 
         while self.graph.not_fully_expanded or self.graph.is_not_path:
-            # TODO: so you found A fully expanded path, what now? 
+            # TODO: so you found A fully expanded path, what now?
             # TODO: stop expanding only when all graphs in the rem have lower cost
             # you don't get an optimality certificate until you expand every other path
 
             # graph is a path -- let's expand a relation in it!
             if self.graph.is_path:
                 # expand and implace
-                next_relation_index, next_expansion = self.graph.pick_next_relation_to_expand()
+                (
+                    next_relation_index,
+                    next_expansion,
+                ) = self.graph.pick_next_relation_to_expand()
                 self.graph = self.expand_graph(next_relation_index, next_expansion)
 
             self.num_solves += 1
             solve_time.start()
             solution_cost, solution_vertices = self.graph.solve()
             solve_time.end()
-            INFO("Solving at " + str(self.num_solves) + " cost is " + str(solution_cost))
+            INFO(
+                "Solving at " + str(self.num_solves) + " cost is " + str(solution_cost)
+            )
 
-            if solution_cost == float('inf'):
+            if solution_cost == float("inf"):
                 # that problem was infeasible
                 # backtrack
                 self.graph = self.rem[-1]
                 self.rem = self.rem[:-1]
                 continue
-                
-            solution_graph = self.make_graph_from_vertices(self.graph, solution_cost, solution_vertices)
+
+            solution_graph = self.make_graph_from_vertices(
+                self.graph, solution_cost, solution_vertices
+            )
             # solution_graph.display_graph("s1")
             assert solution_graph.is_path, "Solution graph is not path"
             # generate a remainder graph from solution
@@ -277,7 +298,7 @@ class HierarchicalGCSAB:
                 self.subtract(solution_graph)
             else:
                 self.graph = None
-            
+
             # add post-subtracted graph to rems
             if self.graph is not None and not self.graph.bad_graph:
                 self.add_to_rem(self.graph)
@@ -298,7 +319,6 @@ class HierarchicalGCSAB:
         self.graph.display_graph("final_solution")
         YAY("Optimal cost is " + str(self.graph.cost))
 
-
     def subtract(self, solution_graph: HierarchicalGraph):
         # TODO: more careful subtraction
         # maintain nodes 1-n in path? knowing which subpaths it does not contain?
@@ -308,7 +328,7 @@ class HierarchicalGCSAB:
         rem_vertices = []
         path = solution_graph.get_path()
         # find the right node
-        relation_index = solution_graph.expanded.find('X')-1
+        relation_index = solution_graph.expanded.find("X") - 1
         prev_rel = None
         for i, node_name in enumerate(path):
             if node_name not in ("start", "target"):
@@ -316,12 +336,12 @@ class HierarchicalGCSAB:
                     prev_rel = node_name[relation_index]
                 else:
                     if prev_rel != node_name[relation_index]:
-                        rem_edges += [path[i-1] + "_" + node_name]
+                        rem_edges += [path[i - 1] + "_" + node_name]
                         prev_rel = node_name[relation_index]
         if len(rem_edges) > 2:
             raise Exception("removing too many edges mate")
         if len(rem_edges) == 2:
-            rem_vertices += [rem_edges[1][:self.opt.rels_len]]
+            rem_vertices += [rem_edges[1][: self.opt.rels_len]]
         if len(rem_edges) == 0:
             raise Exception("removing nothing")
 
@@ -335,10 +355,9 @@ class HierarchicalGCSAB:
                 if v.name() == v_name:
                     self.graph.gcs.RemoveVertex(v)
                     break
-            
+
         self.graph.cost = solution_graph.cost + 0.0001
         self.graph.iteration = self.iteration
-
 
     def make_graph_from_vertices(self, graph, solution_cost, solution_vertices):
         # do i need to
@@ -353,32 +372,51 @@ class HierarchicalGCSAB:
         solution_graph = GraphOfConvexSets()
         prev_node = None
         for node in solution_vertices:
-            solution_node = solution_graph.AddVertex( node.set(), node.name() )
+            solution_node = solution_graph.AddVertex(node.set(), node.name())
             if node.name() == "start":
                 solution_start_vertex = solution_node
                 prev_node = solution_node
             elif node.name() == "target":
                 solution_target_vertex = solution_node
-                self.add_edge(solution_graph, prev_node, solution_node, EdgeOptAB.target_edge())
+                self.add_edge(
+                    solution_graph, prev_node, solution_node, EdgeOptAB.target_edge()
+                )
             else:
                 if prev_node.name() == "start":
-                    self.add_edge(solution_graph, prev_node, solution_node, EdgeOptAB.equality_edge())
+                    self.add_edge(
+                        solution_graph,
+                        prev_node,
+                        solution_node,
+                        EdgeOptAB.equality_edge(),
+                    )
                 else:
-                    self.add_edge(solution_graph, prev_node, solution_node, EdgeOptAB.move_edge())
+                    self.add_edge(
+                        solution_graph, prev_node, solution_node, EdgeOptAB.move_edge()
+                    )
                 prev_node = solution_node
-        return HierarchicalGraph(solution_graph, solution_cost, solution_expanded, solution_iteration, solution_start_vertex, solution_target_vertex)
+        return HierarchicalGraph(
+            solution_graph,
+            solution_cost,
+            solution_expanded,
+            solution_iteration,
+            solution_start_vertex,
+            solution_target_vertex,
+        )
 
     def expand_graph(self, next_relation_index: int, next_expansion: str):
-        # TODO: do not exapnd nodes that are useless 
+        # TODO: do not exapnd nodes that are useless
         # more efficient way to store individual nodes
         # don't repeat subgraphs
         # i need smth like "set all flows to zero, set mine to non-zero"
 
-
         assert self.graph.is_path, "expanding node in a old_graph that is not a path"
         self.iteration += 1
-        start_rels = self.set_gen.construct_rels_representation_from_point(self.start_state.x(), next_expansion)
-        target_rels = self.set_gen.construct_rels_representation_from_point(self.target_state.x(), next_expansion)
+        start_rels = self.set_gen.construct_rels_representation_from_point(
+            self.start_state.x(), next_expansion
+        )
+        target_rels = self.set_gen.construct_rels_representation_from_point(
+            self.target_state.x(), next_expansion
+        )
         start_relation = start_rels[next_relation_index]
         target_relation = target_rels[next_relation_index]
 
@@ -395,55 +433,148 @@ class HierarchicalGCSAB:
                 start_vertex = self.add_vertex(graph, self.start_state, "start")
                 start_col_v = start_vertex
             elif node == "target":
-                assert target_col_v is not None, "target column is none mate this is wrong"
+                assert (
+                    target_col_v is not None
+                ), "target column is none mate this is wrong"
                 target_vertex = self.add_vertex(graph, self.target_state, "target")
-                self.add_edge(graph, target_col_v, target_vertex, EdgeOptAB.target_edge())
+                self.add_edge(
+                    graph, target_col_v, target_vertex, EdgeOptAB.target_edge()
+                )
             else:
-                grounded_start_name = node[:next_relation_index] + start_relation + node[next_relation_index+1:]
-                grounded_start_vertex = self.add_vertex(graph, self.set_gen.get_set_for_rels(grounded_start_name), grounded_start_name)
+                grounded_start_name = (
+                    node[:next_relation_index]
+                    + start_relation
+                    + node[next_relation_index + 1 :]
+                )
+                grounded_start_vertex = self.add_vertex(
+                    graph,
+                    self.set_gen.get_set_for_rels(grounded_start_name),
+                    grounded_start_name,
+                )
                 # connect with previous column
                 assert start_col_v is not None
                 if start_col_v.name() == "start":
-                    self.add_edge(graph, start_col_v, grounded_start_vertex, EdgeOptAB.equality_edge())
+                    self.add_edge(
+                        graph,
+                        start_col_v,
+                        grounded_start_vertex,
+                        EdgeOptAB.equality_edge(),
+                    )
                 else:
-                    self.add_edge(graph, start_col_v, grounded_start_vertex, EdgeOptAB.move_edge())
+                    self.add_edge(
+                        graph, start_col_v, grounded_start_vertex, EdgeOptAB.move_edge()
+                    )
                 start_col_v = grounded_start_vertex
 
                 if start_relation == target_relation:
                     target_col_v = start_col_v
                     continue
                 elif target_relation in self.opt.rel_nbhd[start_relation]:
-                    grounded_target_name = node[:next_relation_index] + target_relation + node[next_relation_index+1:]
-                    grounded_target_vertex = self.add_vertex(graph, self.set_gen.get_set_for_rels(grounded_target_name), grounded_target_name)
-                    self.add_edge(graph, grounded_start_vertex, grounded_target_vertex, EdgeOptAB.move_edge())
+                    grounded_target_name = (
+                        node[:next_relation_index]
+                        + target_relation
+                        + node[next_relation_index + 1 :]
+                    )
+                    grounded_target_vertex = self.add_vertex(
+                        graph,
+                        self.set_gen.get_set_for_rels(grounded_target_name),
+                        grounded_target_name,
+                    )
+                    self.add_edge(
+                        graph,
+                        grounded_start_vertex,
+                        grounded_target_vertex,
+                        EdgeOptAB.move_edge(),
+                    )
                     if target_col_v is not None:
-                        self.add_edge(graph, target_col_v, grounded_target_vertex, EdgeOptAB.move_edge())
+                        self.add_edge(
+                            graph,
+                            target_col_v,
+                            grounded_target_vertex,
+                            EdgeOptAB.move_edge(),
+                        )
                     target_col_v = grounded_target_vertex
                 else:
                     nbh = self.opt.rel_nbhd[start_relation]
-                    grounded_nbh_0_name = node[:next_relation_index] + nbh[0] + node[next_relation_index+1:]
-                    grounded_nbh_1_name = node[:next_relation_index] + nbh[1] + node[next_relation_index+1:]
-                    grounded_nbh_0_vertex = self.add_vertex(graph, self.set_gen.get_set_for_rels(grounded_nbh_0_name), grounded_nbh_0_name)
-                    grounded_nbh_1_vertex = self.add_vertex(graph, self.set_gen.get_set_for_rels(grounded_nbh_1_name), grounded_nbh_1_name)
-                    grounded_target_name = node[:next_relation_index] + target_relation + node[next_relation_index+1:]
-                    grounded_target_vertex = self.add_vertex(graph, self.set_gen.get_set_for_rels(grounded_target_name), grounded_target_name)
+                    grounded_nbh_0_name = (
+                        node[:next_relation_index]
+                        + nbh[0]
+                        + node[next_relation_index + 1 :]
+                    )
+                    grounded_nbh_1_name = (
+                        node[:next_relation_index]
+                        + nbh[1]
+                        + node[next_relation_index + 1 :]
+                    )
+                    grounded_nbh_0_vertex = self.add_vertex(
+                        graph,
+                        self.set_gen.get_set_for_rels(grounded_nbh_0_name),
+                        grounded_nbh_0_name,
+                    )
+                    grounded_nbh_1_vertex = self.add_vertex(
+                        graph,
+                        self.set_gen.get_set_for_rels(grounded_nbh_1_name),
+                        grounded_nbh_1_name,
+                    )
+                    grounded_target_name = (
+                        node[:next_relation_index]
+                        + target_relation
+                        + node[next_relation_index + 1 :]
+                    )
+                    grounded_target_vertex = self.add_vertex(
+                        graph,
+                        self.set_gen.get_set_for_rels(grounded_target_name),
+                        grounded_target_name,
+                    )
 
-                    self.add_edge(graph, grounded_start_vertex, grounded_nbh_0_vertex, EdgeOptAB.move_edge())
-                    self.add_edge(graph, grounded_start_vertex, grounded_nbh_1_vertex, EdgeOptAB.move_edge())
-                    self.add_edge(graph, grounded_nbh_0_vertex, grounded_target_vertex, EdgeOptAB.move_edge())
-                    self.add_edge(graph, grounded_nbh_1_vertex, grounded_target_vertex, EdgeOptAB.move_edge())
+                    self.add_edge(
+                        graph,
+                        grounded_start_vertex,
+                        grounded_nbh_0_vertex,
+                        EdgeOptAB.move_edge(),
+                    )
+                    self.add_edge(
+                        graph,
+                        grounded_start_vertex,
+                        grounded_nbh_1_vertex,
+                        EdgeOptAB.move_edge(),
+                    )
+                    self.add_edge(
+                        graph,
+                        grounded_nbh_0_vertex,
+                        grounded_target_vertex,
+                        EdgeOptAB.move_edge(),
+                    )
+                    self.add_edge(
+                        graph,
+                        grounded_nbh_1_vertex,
+                        grounded_target_vertex,
+                        EdgeOptAB.move_edge(),
+                    )
 
                     if target_col_v is not None:
-                        self.add_edge(graph, target_col_v, grounded_target_vertex, EdgeOptAB.move_edge())
+                        self.add_edge(
+                            graph,
+                            target_col_v,
+                            grounded_target_vertex,
+                            EdgeOptAB.move_edge(),
+                        )
                     target_col_v = grounded_target_vertex
-        
+
         # for v in graph.Vertices():
         #     if v not in ("start", "target"):
         #         if v.name() not in self.set_gen.rels2set:
         #             graph.RemoveVertex(v)
-                    # TODO: this is much more complicated, investigate
+        # TODO: this is much more complicated, investigate
 
-        return HierarchicalGraph(graph, self.graph.cost, next_expansion, self.iteration, start_vertex, target_vertex)
+        return HierarchicalGraph(
+            graph,
+            self.graph.cost,
+            next_expansion,
+            self.iteration,
+            start_vertex,
+            target_vertex,
+        )
 
     def get_initial_graph(self):
         graph = GraphOfConvexSets()
@@ -458,7 +589,9 @@ class HierarchicalGCSAB:
         self.add_edge(graph, start_vertex, xxx_vertex, EdgeOptAB.equality_edge())
         self.add_edge(graph, xxx_vertex, target_vertex, EdgeOptAB.target_edge())
         # return the useful hierarchical graph representation
-        return HierarchicalGraph(graph, float("inf"), xxx_rels, self.iteration, start_vertex, target_vertex)
+        return HierarchicalGraph(
+            graph, float("inf"), xxx_rels, self.iteration, start_vertex, target_vertex
+        )
 
     ###################################################################################
     # Adding edges and vertices

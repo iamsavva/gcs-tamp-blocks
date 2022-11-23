@@ -277,8 +277,8 @@ if __name__ == "__main__":
     plots = True
     randomize = False
 
-    start = np.array([-55,-50, 0,1, -54,-51, 21,22])
-    end = np.array([10,4, 25,-5, 6,7, -11,5])
+    start = np.array([-55, -50, 0, 1, -54, -51, 21, 22])
+    end = np.array([10, 4, 25, -5, 6, 7, -11, 5])
     lbf = -900
     ubf = 900
 

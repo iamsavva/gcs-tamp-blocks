@@ -795,7 +795,7 @@ class GCSforBlocks:
         data.write_png(graph_name + ".png")
         data.write_svg(graph_name + ".svg")
 
-        plt = Image(data.create_png())
+        # plt = Image(data.create_png())
         # display(plt)
 
     def find_path_to_target(

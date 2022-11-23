@@ -287,9 +287,8 @@ class GCSforAutonomousBlocksOptions(GCSforBlocksOptions):
         else:
             paths = []
             for relation in self.rel_nbhd[start_relation]:
-                paths += [ [start_relation, relation, target_relation] ]
+                paths += [[start_relation, relation, target_relation]]
             return paths
-
 
     @property
     def num_modes(self) -> int:

@@ -128,7 +128,9 @@ class GCSforBlocksSplitMove(GCSforBlocks):
             if self.target_mode in self.modes_per_layer[layer]:
                 # for each set that contains the target
                 for set_id in sets_with_target:
-                    names_of_sets_with_target += [self.get_vertex_name(layer, set_id, "T")]
+                    names_of_sets_with_target += [
+                        self.get_vertex_name(layer, set_id, "T")
+                    ]
         # add the edges
         self.connect_to_vertex_on_the_left(
             names_of_sets_with_target, "target", EdgeOptions.within_mode_edge()

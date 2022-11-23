@@ -270,17 +270,17 @@ if __name__ == "__main__":
     # pay += abs(end[0] - (start[0] + delta))
     # print(pay)
 
-    dim = 1
-    nb = 2
-    h = 3
+    dim = 2
+    nb = 3
+    h = 5
     seed = 4
     plots = True
     randomize = False
 
-    # start = np.array([50, 0, 35])
-    # end = np.array([35, 25, 35])
-    lbf = 0
-    ubf = 70
+    start = np.array([-55,-50, 0,1, -54,-51, 21,22])
+    end = np.array([10,4, 25,-5, 6,7, -11,5])
+    lbf = -900
+    ubf = 900
 
     # gcs,_,_=make_simple_transparent_gcs_test(dim, nb, h, constructor = GCSforBlocks, graph_name = "og_micp", use_convex_relaxation=False, start_state=start, target_state=end, ubf = ub, display_graph=plots, max_rounded_paths=0, add_grasp_cost=False, randomize=randomize, seed=seed)
     gcs, _, _ = make_simple_transparent_gcs_test(
@@ -290,10 +290,10 @@ if __name__ == "__main__":
         constructor=GCSforBlocksSplitMove,
         graph_name="og12",
         use_convex_relaxation=True,
-        # start_state=start,
-        # target_state=end,
-        # lbf=lbf,
-        # ubf=ubf,
+        start_state=start,
+        target_state=end,
+        lbf=lbf,
+        ubf=ubf,
         display_graph=plots,
         max_rounded_paths=0,
         add_grasp_cost=False,

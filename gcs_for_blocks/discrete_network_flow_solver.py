@@ -6,6 +6,8 @@ import numpy.typing as npt
 from .util import timeit, INFO, WARN, ERROR, YAY
 from pydrake.solvers import MathematicalProgram, Solve
 
+# import graphviz
+
 
 class Vertex:
     def __init__(self, value: npt.NDArray, name: str):
@@ -14,6 +16,9 @@ class Vertex:
         self.left_nbhs = []
         self.right_nbhs = []
         self.var = None
+
+        self.r = None
+        self.s = None
 
     def add_left_neighbor(self, nbh: str):
         assert nbh not in self.left_nbhs
@@ -27,7 +32,10 @@ class Vertex:
         # variable is either a float or a ContinuousVariable
         assert self.var is None, "Var for " + self.name + " is already set"
         self.var = var
-
+    
+    def set_duals(self, r, s):
+        self.r = r
+        self.s = s
 
 class Edge:
     def __init__(
@@ -77,6 +85,8 @@ class DiscreteNetworkFlowGraph:
     def build_from_start_and_target(
         self, start: npt.NDArray, target: npt.NDArray, block_dim: int, num_blocks: int
     ):
+        self.start = start
+        self.target = target
         bd = block_dim
         num_objects = num_blocks + 1
         # check lengths
@@ -121,12 +131,50 @@ class DiscreteNetworkFlowGraph:
         for e in self.edges.values():
             e.set_cost(np.linalg.norm(e.left.value - e.right.value))
 
-    def solve(self, convex_relaxation = True):
+    def build_dual_optimization_program(self):
+        start = "s0"
+        target = "t0"
+        self.dual_prog = MathematicalProgram()
+
+        for v in self.vertices.values():
+            r = self.dual_prog.NewContinuousVariables(1, "r_" + v.name)[0]
+            s = self.dual_prog.NewContinuousVariables(1, "s_" + v.name)[0]
+            self.dual_prog.AddBoundingBoxConstraint(-0, 1000, r)
+            self.dual_prog.AddBoundingBoxConstraint(-1000, 0, s)
+            v.set_duals(r, s)
+            if v.name == start:
+                self.dual_prog.AddConstraint(v.r == 0.0)
+            if v.name == target:
+                self.dual_prog.AddConstraint(v.s == 0.0)
+        
+        for e in self.edges.values():
+            self.dual_prog.AddConstraint(e.cost + e.right.r + e.left.s >= 0)
+
+        self.dual_prog.AddLinearCost(sum([(v.r+v.s) for v in self.vertices.values()]))
+        # solve
+        self.dual_result = Solve(self.dual_prog)
+        # x.dt("Solving the program")
+
+        if self.dual_result.is_success():
+            YAY( "Optimal cost is %.5f" % self.dual_result.get_optimal_cost())
+        else:
+            ERROR("SOLVE FAILED!")
+        
+  
+        # get potentials
+        r_pots = [
+            (v.name, self.dual_result.GetSolution(v.r), self.dual_result.GetSolution(v.s)) for v in self.vertices.values()
+        ]
+        # sort by potential
+        for value, r, s in r_pots:
+            print(value, r, s)
+
+        
+    def build_primal_optimization_program(self, convex_relaxation = True, add_potentials = True):
         start = "s0"
         target = "t0"
         # is this inefficient or not?
         # in practice, shouldn't I build an edge matrix?
-        x = timeit()
 
         self.prog = MathematicalProgram()
 
@@ -135,51 +183,63 @@ class DiscreteNetworkFlowGraph:
             if convex_relaxation:
                 e.set_var(self.prog.NewContinuousVariables(1, "phi_" + e.name)[0])
                 # add flow 0 to 1 constraint
-                self.prog.AddBoundingBoxConstraint(0.0, 1.0, e.var)
+                self.prog.AddConstraint(e.var >= 0.0)
             else:
                 e.set_var(self.prog.NewBinaryVariables(1, "phi_" + e.name)[0])
 
 
         for v in self.vertices.values():
-            # add vertex potential variables
-            v.set_var(self.prog.NewContinuousVariables(1, "u_" + v.name)[0])
             if v.name != start:
                 # add "flow in is 1" constraint
                 flow_in = sum([self.edges[e].var for e in v.left_nbhs])
                 self.prog.AddConstraint(flow_in == 1)
-                # potential is between 1 and n-1
-                self.prog.AddBoundingBoxConstraint(1.0, self.n - 1.0, v.var)
-            else:
-                # potential at start is 0
-                self.prog.AddConstraint(v.var == 0)
-
-            # add flow out is 1 constraint
             if v.name != target:
+                # add flow out is 1 constraint
                 flow_out = sum([self.edges[e].var for e in v.right_nbhs])
                 self.prog.AddConstraint(flow_out == 1)
 
-        # for each edge, generate a flow variable
-        for e in self.edges.values():
-            # increasing potential over edge flow
-            pot_diff = e.right.var + self.n - 2 - e.left.var - (self.n - 1) * e.var
-            self.prog.AddConstraint(pot_diff >= 0)
+        if add_potentials:
+            # add vertex potential variables
+            for v in self.vertices.values():
+                v.set_var(self.prog.NewContinuousVariables(1, "u_" + v.name)[0])
+                if v.name != start:
+                    # potential is between 1 and n-1
+                    self.prog.AddBoundingBoxConstraint(1.0, self.n - 1.0, v.var)
+                else:
+                    # potential at start is 0
+                    self.prog.AddConstraint(v.var == 0)
+
+            # for each edge, increasing potential over edge flow
+            for e in self.edges.values():
+                pot_diff = e.right.var + self.n - 2 - e.left.var - (self.n - 1) * e.var
+                self.prog.AddConstraint(pot_diff >= 0)
 
         # add cost
         self.prog.AddLinearCost(sum([e.var * e.cost for e in self.edges.values()]))
+        
+
+    def solve_primal(self, convex_relaxation = True):
+        # build the program
+        x = timeit()
+        self.build_primal_optimization_program(convex_relaxation)
         x.dt("Building the program")
 
         # solve
         self.result = Solve(self.prog)
         x.dt("Solving the program")
 
-        INFO(f"Is solved successfully: {self.result.is_success()}")
-        print(f"optimal cost: {self.result.get_optimal_cost()}")
+        if self.result.is_success():
+            YAY( "Optimal cost is %.5f" % self.result.get_optimal_cost())
+        else:
+            ERROR("SOLVE FAILED!")
 
-        flows = [(e.name, self.result.GetSolution(e.var)) for e in self.edges.values()]
-        for name, flow in flows:
-            if flow > 0:
-                print(name, flow)
+        # # get flow results
+        # flows = [(e.name, self.result.GetSolution(e.var)) for e in self.edges.values()]
+        # for name, flow in flows:
+        #     if flow > 0:
+        #         print(name, flow)
 
+        # get potentials
         potentials = [
             (v.name, self.result.GetSolution(v.var)) for v in self.vertices.values()
         ]
@@ -187,3 +247,41 @@ class DiscreteNetworkFlowGraph:
         potentials.sort(key=lambda y: y[1])
         for value, potential in potentials:
             print(value, potential)
+
+        
+    def draw(self):
+        # get potentials
+        potentials = [
+            (v.name, self.result.GetSolution(v.var)) for v in self.vertices.values()
+        ]
+
+        # # get flow results
+        # flows = [(e.name, self.result.GetSolution(e.var)) for e in self.edges.values()]
+
+
+        # f = graphviz.Digraph('', filename='fsm.gv')
+
+        # f.attr(rankdir='LR', size='8,5')
+        # f.attr('node', shape='doublecircle')
+        # f.node('LR_0')
+        # f.node('LR_3')
+        # f.node('LR_4')
+        # f.node('LR_8')
+
+        # f.attr('node', shape='circle')
+        # f.edge('LR_0', 'LR_2', label='SS(B)')
+        # f.edge('LR_0', 'LR_1', label='SS(S)')
+        # f.edge('LR_1', 'LR_3', label='S($end)')
+        # f.edge('LR_2', 'LR_6', label='SS(b)')
+        # f.edge('LR_2', 'LR_5', label='SS(a)')
+        # f.edge('LR_2', 'LR_4', label='S(A)')
+        # f.edge('LR_5', 'LR_7', label='S(b)')
+        # f.edge('LR_5', 'LR_5', label='S(a)')
+        # f.edge('LR_6', 'LR_6', label='S(b)')
+        # f.edge('LR_6', 'LR_5', label='S(a)')
+        # f.edge('LR_7', 'LR_8', label='S(b)')
+        # f.edge('LR_7', 'LR_5', label='S(a)')
+        # f.edge('LR_8', 'LR_6', label='S(b)')
+        # f.edge('LR_8', 'LR_5', label='S(a)')
+
+        # f.view()

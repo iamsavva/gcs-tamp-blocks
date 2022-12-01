@@ -92,6 +92,7 @@ class DiscreteNetworkFlowGraph:
         # check lengths
         assert len(start) == block_dim * num_objects
         assert len(target) == block_dim * num_objects
+        
         # naming
         def s(i):
             return "s" + str(i)

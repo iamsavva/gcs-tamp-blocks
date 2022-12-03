@@ -109,6 +109,7 @@ class TSPasGCS:
             
         # for each edge, add constraints
         for e in self.edges.values():
+            # TODO: formulate this nicer through Ax < bphi
             A = np.array( [[-(self.n-1), 1], [-1, 0], [0, 1]] )
             b = np.array( [0, 0, self.n-1] )
             # flow and left variable belong to an order increase cone

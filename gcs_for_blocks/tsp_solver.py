@@ -11,11 +11,14 @@ from pydrake.math import le, eq
 
 
 class Vertex:
-    def __init__(self, value: npt.NDArray, name: str):
+    def __init__(self, name: str, value: npt.NDArray = np.array([])):
         self.value = value # effectively just the name
         self.name = name # name of the vertex
         self.edges_in = [] # str names of edges in 
         self.edges_out = [] # str names of edges out
+
+        self.v = None
+        self.order = None
 
     def add_edge_in(self, nbh: str):
         assert nbh not in self.edges_in
@@ -24,6 +27,14 @@ class Vertex:
     def add_edge_out(self, nbh: str):
         assert nbh not in self.edges_out
         self.edges_out.append(nbh)
+
+    def set_v(self, v):
+        assert self.v is None, "V for " + self.name + " is already set"
+        self.v = v
+
+    def set_order(self, order):
+        assert self.order is None, "Order for " + self.name + " is already set"
+        self.order = order
 
 class Edge:
     def __init__(
@@ -57,8 +68,8 @@ class Edge:
 
 class TSPasGCS:
     def __init__(self):
-        self.edges = dict()  # T.Dict[str, Edge]
-        self.vertices = dict()  # T.Dict[str, Vertex]
+        self.edges = dict()  # type: T.Dict[str, Edge]
+        self.vertices = dict()  # type: T.Dict[str, Vertex]
         self.start = None # str
         self.target = None # str
         self.primal_prog = None # MathematicalProgram
@@ -68,9 +79,9 @@ class TSPasGCS:
     def n(self): # number of vertices
         return len(self.vertices)
 
-    def add_vertex(self, value: npt.NDArray, name: str):
+    def add_vertex(self, name: str, value: npt.NDArray = np.array([])):
         assert name not in self.vertices, "Vertex with name " + name + " already exists"
-        self.vertices[name] = Vertex(value, name)
+        self.vertices[name] = Vertex(name, value)
 
     def add_edge(self, left_name: str, right_name: str, edge_name: str, cost=None):
         assert edge_name not in self.edges, "Edge " + edge_name + " already exists"
@@ -195,8 +206,8 @@ def build_block_moving_gcs_tsp(start: npt.NDArray, target: npt.NDArray, block_di
         # pre-processing: if start_i = target_i, there is no need to move that object
         # must do same check over edges
         # if not (i > 0 and np.allclose(start_i, target_i)):
-        gcs.add_vertex(start_i, s(i))
-        gcs.add_vertex(target_i, t(i))
+        gcs.add_vertex(s(i), start_i)
+        gcs.add_vertex(t(i), target_i)
 
     # add all edges
     # add edge to from initial arm location to final arm location

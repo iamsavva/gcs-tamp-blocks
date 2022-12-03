@@ -7,6 +7,31 @@ import matplotlib.patches as patches
 from PIL import Image
 from matplotlib.pyplot import cm
 
+class Box:
+    def __init__(self, lb, ub, state_dim):
+        assert state_dim == len(lb)
+        assert state_dim == len(ub)
+        self.lb = lb
+        self.ub = ub
+        self.state_dim = state_dim
+
+    def get_hpolyhedron(self):
+        # Ax <= b
+        A = np.vstack( (np.eye(self.state_dim), -np.eye(self.state_dim)) )
+        b = np.hstack( (self.ub, self.lb))
+        return A, b
+    
+    def get_perspective_hpolyhedron(self):
+        # Ax <= b * lambda
+        # Ax - b * lambda <= 0
+        # [A -b] [x, lambda]^T <= 0
+        A, b = self.get_hpolyhedron()
+        b.resize((2*self.state_dim, 1))
+        pA = np.hstack((A, -b)) 
+        pb = np.zeros(2*self.state_dim)
+        return pA, pb
+
+
 class AlignedSet:
     # axis aligned set
     def __init__(self, a, b, l, r, name = ""):
@@ -16,6 +41,7 @@ class AlignedSet:
         # right bound r
         self.constraints = {"a": a, "b":b, "l":l, "r":r} # type: T.Dict[str, float]
         self.name = name # type: str
+        self.box = Box( lb=np.array([l,b]), ub = np.array([r,a]), state_dim = 2 )
 
     @property
     def l(self):
@@ -37,6 +63,9 @@ class AlignedSet:
     @property
     def set_is_obstacle(self):
         return self.name != ""
+
+    def copy(self):
+        return AlignedSet(a=self.a, b=self.b, l=self.l, r=self.r, name=self.name)
 
 
     def new_constraint_is_stronger(self, dir:str, new_val:float):
@@ -96,14 +125,21 @@ class AlignedSet:
         sets.append( AlignedSet(r = bounding_box.r, l = bounding_box.l, b = self.a, a = bounding_box.a ) )
         return sets
 
-    def get_rectangle(self, color):    
+    def get_rectangle(self, color:str):  
         return patches.Rectangle((self.l, self.b), self.r-self.l, self.a-self.b, linewidth=1, edgecolor='black', facecolor=color, label=self.name)
+
+    def get_hpolyhedron(self):
+        # Ax <= b
+        return self.box.get_hpolyhedron()
+
+    def get_perspective_hpolyhedron(self):
+        # Ax <= b phi
+        return self.box.get_perspective_hpolyhedron()
 
 
 def axis_aligned_tesselation(bounding_box: AlignedSet, obstacles:T.List[AlignedSet]):
     all_sets = set() # type: T.Set[AlignedSet]
     all_sets.add(bounding_box)
-    indd = 0
     temp_box_index = 0
     for obstacle in obstacles:
         new_sets = []
@@ -127,8 +163,14 @@ def axis_aligned_tesselation(bounding_box: AlignedSet, obstacles:T.List[AlignedS
             all_sets.add(add_me)
         for rem in rem_sets:
             all_sets.remove(rem)
-        indd += 1
-    return list(all_sets)
+
+    all_sets = list(all_sets)
+
+    # assert that no sets intersect
+    for i in range(len(all_sets)):
+        for j in range(i+1, len(all_sets)):
+            assert not all_sets[i].intersects_with( all_sets[j] ), ("\n" + all_sets[i].__repr__() + "\n" + all_sets[j].__repr__())
+    return all_sets
 
 def locations_to_aligned_sets(start, target, block_width):
     bw = block_width
@@ -153,23 +195,21 @@ def plot_list_of_aligned_sets(sets, bounding_box):
     ax.set_ylim([bounding_box.b, bounding_box.a])
     plt.show()
 
-def get_edges(sets):
-    for i in range(len(sets)):
-        for j in range(i, len(sets)):
-            if sets[i].share_edge( sets[j] ):
-                print( sets[i].name, sets[j].name )
+
 
 colors = cm.rainbow(np.linspace(0, 1, 30))
 
 bounding_box = AlignedSet(b=0,a=12,l=0,r=12)
 block_width = 1
-# start = [(1,1), (3,5), (7,4)]
-# target = [(5,11), (9,7), (5,8)]
-start = [(1,1)]
-target = [(5,11)]
+start = [(1,1), (3,5), (7,4)]
+target = [(5,11), (9,7), (5,8)]
+# start = [(1,1)]
+# target = [(5,11)]
 
 obstacles = locations_to_aligned_sets(start,target, block_width)
 sets = axis_aligned_tesselation(bounding_box, obstacles)
+
+
 # index the boxes
 index = 0
 for s in sets:
@@ -177,7 +217,6 @@ for s in sets:
         s.name = "r" + str(index)
         index += 1
 
-get_edges(sets)
 plot_list_of_aligned_sets(sets, bounding_box)
 
 

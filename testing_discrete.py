@@ -8,9 +8,17 @@ import numpy as np
 # raise Exception
 
 bd = 1
-nb = 7
-start = np.array([0.0, 1, 2, 3, 4, 5, 6, 7])
-target = np.array([2.0, 3, 4, 5, 6, 7, 8, 9])
+nb = 9
+start = np.array([0.0, 1, 2, 3, 4, 5, 6, 7, 10, 20])
+target = np.array([2.0, 3, 4, 5, 6, 7, 30, 9, 11, 12])
+
+# nb = 4
+# start = np.array([0.0, 1, 5, 6, 7])
+# target = np.array([2.0, 3, 7, 8, 9])
+
+# nb = 4
+# start = np.array([0.0, 1, 2, 3, 4])
+# target = np.array([2.0, 3, 4, 5, 6])
 
 # nb = 2
 # start = np.array([0.0, 1, 2])
@@ -20,6 +28,7 @@ target = np.array([2.0, 3, 4, 5, 6, 7, 8, 9])
 # np.random.seed(2)
 # start += np.random.normal(0, 0.01, len(start))
 # target += np.random.normal(0, 0.01, len(target))
+convex_relaxation = False
 convex_relaxation = True
 
 

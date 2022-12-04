@@ -6,6 +6,7 @@ import numpy.typing as npt
 from .util import timeit, INFO, WARN, ERROR, YAY
 from pydrake.solvers import MathematicalProgram, Solve
 from pydrake.math import le, eq
+from .axis_aligned_set_tesselation_2d import Box
 
 # import graphviz
 
@@ -120,17 +121,47 @@ class TSPasGCS:
             else:
                 e.set_phi(self.primal_prog.NewBinaryVariables(1, "phi_" + e.name)[0])
 
+        
+        
         # for each edge, add constraints
         for e in self.edges.values():
-            # TODO: formulate this nicer through Ax < bphi
-            A = np.array([[-(self.n - 1), 1], [-1, 0], [0, 1]])
-            b = np.array([0, 0, self.n - 1])
-            # flow and left variable belong to an order increase cone
-            self.primal_prog.AddLinearConstraint(le(A @ np.array([e.phi, e.y]), b))
-            # flow and right variable belong to an order increase cone
-            self.primal_prog.AddLinearConstraint(le(A @ np.array([e.phi, e.z]), b))
+            order_box = Box(lb=np.array([1]), ub=np.array([self.n-1]), state_dim=1)
+            A1, b1 = order_box.get_perspective_hpolyhedron()
+
+            order_box = Box(lb=np.array([2]), ub=np.array([self.n-1]), state_dim=1)
+            A2, b2 = order_box.get_perspective_hpolyhedron()
+
+            if e.left.name == self.start:
+                order_box_origin = Box(lb=np.array([0]), ub=np.array([0]), state_dim=1)
+                oA, ob = order_box_origin.get_perspective_hpolyhedron()
+                self.primal_prog.AddLinearConstraint(le(oA @ np.array([e.y, e.phi]), ob))
+            elif e.left.name[0] == "s":
+                self.primal_prog.AddLinearConstraint(le(A1 @ np.array([e.y, e.phi]), b1))
+            else:
+                self.primal_prog.AddLinearConstraint(le(A2 @ np.array([e.y, e.phi]), b2))
+
+            if e.right.name == self.target:
+                target_box = Box(lb=np.array([self.n-2]), ub=np.array([self.n-2]), state_dim=1)
+                tA, tb = target_box.get_perspective_hpolyhedron()
+                self.primal_prog.AddLinearConstraint(le(tA @ np.array([e.y, e.phi]), tb))
+                self.primal_prog.AddLinearConstraint(le(A2 @ np.array([e.z, e.phi]), b2))
+            elif e.right.name[0] == "s":
+                self.primal_prog.AddLinearConstraint(le(A1 @ np.array([e.z, e.phi]), b1))
+            else:
+                self.primal_prog.AddLinearConstraint(le(A2 @ np.array([e.z, e.phi]), b2))
+
+            # self.primal_prog.AddLinearConstraint(le(A @ np.array([e.z, e.phi]), b))
+
+            # A = np.array([[-(self.n - 1), 1], [-1, 0], [0, 1]])
+            # b = np.array([0, 0, self.n - 1])
+            # # flow and left variable belong to an order increase cone
+            # self.primal_prog.AddLinearConstraint(le(A @ np.array([e.phi, e.y]), b))
+            # # flow and right variable belong to an order increase cone
+            # self.primal_prog.AddLinearConstraint(le(A @ np.array([e.phi, e.z]), b))
+
             # order increase constraint
             self.primal_prog.AddLinearConstraint(e.y + e.phi == e.z)
+            self.primal_prog.AddLinearConstraint(e.phi, 0.0, 1.0)
 
         # for each vertex, add constraints
         for v in self.vertices.values():
@@ -154,8 +185,21 @@ class TSPasGCS:
             else:
                 self.primal_prog.AddLinearConstraint(sum_of_y == sum_of_z)
 
+        # expr = self.edges["s2_t2"].phi + self.edges["t2_s4"].phi + self.edges["s4_t4"].phi + self.edges["t4_s3"].phi + self.edges["s3_t3"].phi + self.edges["t3_s2"].phi <= 5
+        # self.primal_prog.AddLinearConstraint(expr)
+
+        # self.primal_prog.AddLinearConstraint( sum( [e.z for e in self.edges.values()]) == (self.n-1)*self.n/2 )
+        left_vs = set()
+        right_vs = set()
+
+        self.primal_prog.AddLinearConstraint( sum( [e.z for e in self.edges.values()]) == (self.n-1)*self.n/2 )
+        self.primal_prog.AddLinearConstraint( sum( [e.y for e in self.edges.values()]) == (self.n-2)*(self.n-1)/2 )
+
         # add cost
         self.primal_prog.AddLinearCost(sum([e.phi * e.cost for e in self.edges.values()]))
+        
+        # self.primal_prog.AddQuadraticCost(sum([(e.z) * (0.1) for e in self.edges.values()]))
+    
 
     def solve_primal(self, convex_relaxation=True):
         # build the program
@@ -182,13 +226,36 @@ class TSPasGCS:
         else:
             YAY("SOLUTION IS TIGHT")
 
+        flow_vars = [(e.name, self.primal_solution.GetSolution(e.phi)) for e in self.edges.values()]
+        for (name, flow) in flow_vars:
+            if flow > 0.01:
+                print(name, flow)
+        
+        pots = []
+        for v in self.vertices.values():
+            # sum of ys = sum of zs
+            # print(v.name)
+            sum_of_y = [self.primal_solution.GetSolution(self.edges[e].y) for e in v.edges_out]
+            sum_of_z = [self.primal_solution.GetSolution(self.edges[e].z) for e in v.edges_in]
+            print(v.name, sum_of_y, sum_of_z)
+            sum_of_y = sum([self.primal_solution.GetSolution(self.edges[e].y) for e in v.edges_out])
+            sum_of_z = sum([self.primal_solution.GetSolution(self.edges[e].z) for e in v.edges_in])
+            pots.append( (v.name, sum_of_z) )
+        # pots = [name for (name, _) in sorted(pots, key = lambda x: x[1])]
+        pots = [x for x in sorted(pots, key = lambda x: x[1])]
+        print(pots)
+        
+
+        # print(sum( [self.primal_solution.GetSolution(e.y) for e in self.edges.values()]))
+        # print(sum( [self.primal_solution.GetSolution(e.z) for e in self.edges.values()]))
+
 
 def build_block_moving_gcs_tsp(
     start: npt.NDArray, target: npt.NDArray, block_dim: int, num_blocks: int
 ) -> TSPasGCS:
     bd = block_dim
     num_objects = num_blocks + 1
-    # check lengths
+    # check lengths 
     assert len(start) == block_dim * num_objects
     assert len(target) == block_dim * num_objects
     # naming

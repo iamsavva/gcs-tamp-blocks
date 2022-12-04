@@ -19,7 +19,7 @@ class Box:
     def get_hpolyhedron(self):
         # Ax <= b
         A = np.vstack((np.eye(self.state_dim), -np.eye(self.state_dim)))
-        b = np.hstack((self.ub, self.lb))
+        b = np.hstack((self.ub, -self.lb))
         return A, b
 
     def get_perspective_hpolyhedron(self):
@@ -221,24 +221,26 @@ def plot_list_of_aligned_sets(sets, bounding_box):
     plt.show()
 
 
-colors = cm.rainbow(np.linspace(0, 1, 30))
-
-bounding_box = AlignedSet(b=0, a=12, l=0, r=12)
-block_width = 1
-start = [(1, 1), (3, 5), (7, 4)]
-target = [(5, 11), (9, 7), (5, 8)]
-# start = [(1,1)]
-# target = [(5,11)]
-
-obstacles = locations_to_aligned_sets(start, target, block_width)
-sets = axis_aligned_tesselation(bounding_box, obstacles)
 
 
-# index the boxes
-index = 0
-for s in sets:
-    if not s.set_is_obstacle:
-        s.name = "r" + str(index)
-        index += 1
+# colors = cm.rainbow(np.linspace(0, 1, 30))
 
-plot_list_of_aligned_sets(sets, bounding_box)
+# bounding_box = AlignedSet(b=0, a=12, l=0, r=12)
+# block_width = 1
+# start = [(1, 1), (3, 5), (7, 4)]
+# target = [(5, 11), (9, 7), (5, 8)]
+# # start = [(1,1)]
+# # target = [(5,11)]
+
+# obstacles = locations_to_aligned_sets(start, target, block_width)
+# sets = axis_aligned_tesselation(bounding_box, obstacles)
+
+
+# # index the boxes
+# index = 0
+# for s in sets:
+#     if not s.set_is_obstacle:
+#         s.name = "r" + str(index)
+#         index += 1
+
+# plot_list_of_aligned_sets(sets, bounding_box)

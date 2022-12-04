@@ -2,6 +2,11 @@ from gcs_for_blocks.tsp_solver import build_block_moving_gcs_tsp, TSPasGCS
 import numpy as np
 
 
+# a = [1,None]
+# print( sum([x for x in a]) )
+
+# raise Exception
+
 bd = 1
 nb = 7
 start = np.array([0.0, 1, 2, 3, 4, 5, 6, 7])

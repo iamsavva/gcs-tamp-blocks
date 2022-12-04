@@ -45,24 +45,24 @@ class Edge:
         self.cost = cost
 
         # primal variables
-        self.phi = None
-        self.y = None
-        self.z = None
+        self.phi = 0
+        self.y = 0
+        self.z = 0
 
     def set_cost(self, cost: float):
         assert self.cost is None, "Cost for " + self.name + " is already set"
         self.cost = cost
 
     def set_phi(self, flow):
-        assert self.phi is None, "Flow for " + self.name + " is already set"
+        assert self.phi == 0, "Flow for " + self.name + " is already set"
         self.phi = flow
 
     def set_y(self, y):
-        assert self.y is None, "y for " + self.name + " is already set"
+        assert self.y == 0, "y for " + self.name + " is already set"
         self.y = y
 
     def set_z(self, z):
-        assert self.z is None, "z for " + self.name + " is already set"
+        assert self.z == 0, "z for " + self.name + " is already set"
         self.z = z
 
 
@@ -83,7 +83,9 @@ class TSPasGCS:
         assert name not in self.vertices, "Vertex with name " + name + " already exists"
         self.vertices[name] = Vertex(name, value)
 
-    def add_edge(self, left_name: str, right_name: str, edge_name: str, cost=None):
+    def add_edge(self, left_name: str, right_name: str, edge_name: str = None, cost:float=None):
+        if edge_name is None:
+            edge_name = left_name + "_" + right_name
         assert edge_name not in self.edges, "Edge " + edge_name + " already exists"
         self.edges[edge_name] = Edge(
             self.vertices[left_name], self.vertices[right_name], edge_name, cost
@@ -139,6 +141,7 @@ class TSPasGCS:
             if v.name != self.target:
                 # add flow out is 1 constraint
                 flow_out = sum([self.edges[e].phi for e in v.edges_out])
+                self.primal_prog.AddLinearConstraint(flow_out == 1)
 
             # sum of ys = sum of zs
             sum_of_y = sum([self.edges[e].y for e in v.edges_out])

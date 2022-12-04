@@ -10,7 +10,7 @@ import numpy as np
 bd = 1
 nb = 9
 start = np.array([0.0, 1, 2, 3, 4, 5, 6, 7, 10, 20])
-target = np.array([2.0, 3, 4, 5, 6, 7, 30, 9, 11, 12])
+target = np.array([2.0, 2, 4, 5, 6, 7, 30, 9, 11, 12])
 
 # nb = 4
 # start = np.array([0.0, 1, 5, 6, 7])

@@ -191,6 +191,25 @@ class TSPasGCS:
         # self.primal_prog.AddLinearConstraint( sum( [e.z for e in self.edges.values()]) == (self.n-1)*self.n/2 )
         left_vs = set()
         right_vs = set()
+        for v in self.vertices.values():
+            if v.name == "s0":
+                left_vs.add(v.name)
+            elif v.name == "t0":
+                right_vs.add(v.name)
+            elif v.name[0] == "t":
+                left_vs.add(v.name)
+            else:
+                right_vs.add(v.name)
+        # print(left_vs)
+        # print(right_vs)
+        left_pot_sum = (self.n/2) * (self.n/2-1)
+        right_pot_sum = (self.n-1) * self.n / 2 - left_pot_sum
+        
+        # print(left_pot_sum, right_pot_sum)
+        # print(sum( [e.z for e in self.edges.values() if e.right.name in left_vs]))
+        
+        self.primal_prog.AddLinearConstraint( sum( [e.z for e in self.edges.values() if e.right.name in left_vs]) == left_pot_sum )
+        self.primal_prog.AddLinearConstraint( sum( [e.z for e in self.edges.values() if e.right.name in right_vs]) == right_pot_sum )
 
         self.primal_prog.AddLinearConstraint( sum( [e.z for e in self.edges.values()]) == (self.n-1)*self.n/2 )
         self.primal_prog.AddLinearConstraint( sum( [e.y for e in self.edges.values()]) == (self.n-2)*(self.n-1)/2 )
@@ -244,6 +263,28 @@ class TSPasGCS:
         # pots = [name for (name, _) in sorted(pots, key = lambda x: x[1])]
         pots = [x for x in sorted(pots, key = lambda x: x[1])]
         print(pots)
+
+        # left_vs = set()
+        # right_vs = set()
+        # for v in self.vertices.values():
+        #     if v.name == "s0":
+        #         left_vs.add(v.name)
+        #     elif v.name == "t0":
+        #         right_vs.add(v.name)
+        #     elif v.name[0] == "t":
+        #         left_vs.add(v.name)
+        #     else:
+        #         right_vs.add(v.name)
+        # print(left_vs)
+        # print(right_vs)
+        # print(sum( [self.primal_solution.GetSolution(e.z) for e in self.edges.values() if e.right.name in left_vs]))
+        # print(sum( [self.primal_solution.GetSolution(e.z) for e in self.edges.values() if e.right.name in right_vs]))
+        # left_pot_sum = (self.n/2) * (self.n/2-1)
+        # right_pot_sum = (self.n-1) * self.n / 2 - left_pot_sum
+        # print(left_pot_sum, right_pot_sum)
+
+
+
         
 
         # print(sum( [self.primal_solution.GetSolution(e.y) for e in self.edges.values()]))

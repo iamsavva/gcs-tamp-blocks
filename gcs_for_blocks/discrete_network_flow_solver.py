@@ -32,15 +32,14 @@ class Vertex:
         # variable is either a float or a ContinuousVariable
         assert self.var is None, "Var for " + self.name + " is already set"
         self.var = var
-    
+
     def set_duals(self, r, s):
         self.r = r
         self.s = s
 
+
 class Edge:
-    def __init__(
-        self, left_vertex: Vertex, right_vertex: Vertex, name: str, cost: float = None
-    ):
+    def __init__(self, left_vertex: Vertex, right_vertex: Vertex, name: str, cost: float = None):
         self.left = left_vertex
         self.right = right_vertex
         self.name = name
@@ -92,7 +91,7 @@ class DiscreteNetworkFlowGraph:
         # check lengths
         assert len(start) == block_dim * num_objects
         assert len(target) == block_dim * num_objects
-        
+
         # naming
         def s(i):
             return "s" + str(i)
@@ -147,31 +146,34 @@ class DiscreteNetworkFlowGraph:
                 self.dual_prog.AddConstraint(v.r == 0.0)
             if v.name == target:
                 self.dual_prog.AddConstraint(v.s == 0.0)
-        
+
         for e in self.edges.values():
             self.dual_prog.AddConstraint(e.cost + e.right.r + e.left.s >= 0)
 
-        self.dual_prog.AddLinearCost(sum([(v.r+v.s) for v in self.vertices.values()]))
+        self.dual_prog.AddLinearCost(sum([(v.r + v.s) for v in self.vertices.values()]))
         # solve
         self.dual_result = Solve(self.dual_prog)
         # x.dt("Solving the program")
 
         if self.dual_result.is_success():
-            YAY( "Optimal cost is %.5f" % self.dual_result.get_optimal_cost())
+            YAY("Optimal cost is %.5f" % self.dual_result.get_optimal_cost())
         else:
             ERROR("SOLVE FAILED!")
-        
-  
+
         # get potentials
         r_pots = [
-            (v.name, self.dual_result.GetSolution(v.r), self.dual_result.GetSolution(v.s)) for v in self.vertices.values()
+            (
+                v.name,
+                self.dual_result.GetSolution(v.r),
+                self.dual_result.GetSolution(v.s),
+            )
+            for v in self.vertices.values()
         ]
         # sort by potential
         for value, r, s in r_pots:
             print(value, r, s)
 
-        
-    def build_primal_optimization_program(self, convex_relaxation = True, add_potentials = True):
+    def build_primal_optimization_program(self, convex_relaxation=True, add_potentials=True):
         start = "s0"
         target = "t0"
         # is this inefficient or not?
@@ -187,7 +189,6 @@ class DiscreteNetworkFlowGraph:
                 self.prog.AddConstraint(e.var >= 0.0)
             else:
                 e.set_var(self.prog.NewBinaryVariables(1, "phi_" + e.name)[0])
-
 
         for v in self.vertices.values():
             if v.name != start:
@@ -217,9 +218,8 @@ class DiscreteNetworkFlowGraph:
 
         # add cost
         self.prog.AddLinearCost(sum([e.var * e.cost for e in self.edges.values()]))
-        
 
-    def solve_primal(self, convex_relaxation = True):
+    def solve_primal(self, convex_relaxation=True):
         # build the program
         x = timeit()
         self.build_primal_optimization_program(convex_relaxation)
@@ -230,7 +230,7 @@ class DiscreteNetworkFlowGraph:
         x.dt("Solving the program")
 
         if self.result.is_success():
-            YAY( "Optimal cost is %.5f" % self.result.get_optimal_cost())
+            YAY("Optimal cost is %.5f" % self.result.get_optimal_cost())
         else:
             ERROR("SOLVE FAILED!")
 
@@ -241,24 +241,18 @@ class DiscreteNetworkFlowGraph:
         #         print(name, flow)
 
         # get potentials
-        potentials = [
-            (v.name, self.result.GetSolution(v.var)) for v in self.vertices.values()
-        ]
+        potentials = [(v.name, self.result.GetSolution(v.var)) for v in self.vertices.values()]
         # sort by potential
         potentials.sort(key=lambda y: y[1])
         for value, potential in potentials:
             print(value, potential)
 
-        
     def draw(self):
         # get potentials
-        potentials = [
-            (v.name, self.result.GetSolution(v.var)) for v in self.vertices.values()
-        ]
+        potentials = [(v.name, self.result.GetSolution(v.var)) for v in self.vertices.values()]
 
         # # get flow results
         # flows = [(e.name, self.result.GetSolution(e.var)) for e in self.edges.values()]
-
 
         # f = graphviz.Digraph('', filename='fsm.gv')
 

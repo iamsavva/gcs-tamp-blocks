@@ -5,7 +5,7 @@ import numpy as np
 bd = 1
 nb = 7
 start = np.array([0.0, 1, 2, 3, 4, 5, 6, 7])
-target = np.array([2.0, 3,4,5,6,7,8,9])
+target = np.array([2.0, 3, 4, 5, 6, 7, 8, 9])
 
 # nb = 2
 # start = np.array([0.0, 1, 2])

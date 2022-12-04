@@ -12,10 +12,10 @@ from pydrake.math import le, eq
 
 class Vertex:
     def __init__(self, name: str, value: npt.NDArray = np.array([])):
-        self.value = value # effectively just the name
-        self.name = name # name of the vertex
-        self.edges_in = [] # str names of edges in 
-        self.edges_out = [] # str names of edges out
+        self.value = value  # effectively just the name
+        self.name = name  # name of the vertex
+        self.edges_in = []  # str names of edges in
+        self.edges_out = []  # str names of edges out
 
         self.v = None
         self.order = None
@@ -36,10 +36,9 @@ class Vertex:
         assert self.order is None, "Order for " + self.name + " is already set"
         self.order = order
 
+
 class Edge:
-    def __init__(
-        self, left_vertex: Vertex, right_vertex: Vertex, name: str, cost: float = None
-    ):
+    def __init__(self, left_vertex: Vertex, right_vertex: Vertex, name: str, cost: float = None):
         self.left = left_vertex
         self.right = right_vertex
         self.name = name
@@ -66,17 +65,18 @@ class Edge:
         assert self.z is None, "z for " + self.name + " is already set"
         self.z = z
 
+
 class TSPasGCS:
     def __init__(self):
         self.edges = dict()  # type: T.Dict[str, Edge]
         self.vertices = dict()  # type: T.Dict[str, Vertex]
-        self.start = None # str
-        self.target = None # str
-        self.primal_prog = None # MathematicalProgram
-        self.primal_solution = None 
+        self.start = None  # str
+        self.target = None  # str
+        self.primal_prog = None  # MathematicalProgram
+        self.primal_solution = None
 
     @property
-    def n(self): # number of vertices
+    def n(self):  # number of vertices
         return len(self.vertices)
 
     def add_vertex(self, name: str, value: npt.NDArray = np.array([])):
@@ -97,11 +97,11 @@ class TSPasGCS:
     def build_dual_optimization_program(self):
         raise Exception("Not Implemented")
 
-    def set_start_target(self, start_name:str, target_name:str):
+    def set_start_target(self, start_name: str, target_name: str):
         self.start = start_name
         self.target = target_name
-    
-    def build_primal_optimization_program(self, convex_relaxation = True):
+
+    def build_primal_optimization_program(self, convex_relaxation=True):
         assert self.start is not None
         assert self.target is not None
         assert self.start in self.vertices
@@ -117,18 +117,18 @@ class TSPasGCS:
                 e.set_phi(self.primal_prog.NewContinuousVariables(1, "phi_" + e.name)[0])
             else:
                 e.set_phi(self.primal_prog.NewBinaryVariables(1, "phi_" + e.name)[0])
-            
+
         # for each edge, add constraints
         for e in self.edges.values():
             # TODO: formulate this nicer through Ax < bphi
-            A = np.array( [[-(self.n-1), 1], [-1, 0], [0, 1]] )
-            b = np.array( [0, 0, self.n-1] )
+            A = np.array([[-(self.n - 1), 1], [-1, 0], [0, 1]])
+            b = np.array([0, 0, self.n - 1])
             # flow and left variable belong to an order increase cone
-            self.primal_prog.AddLinearConstraint( le(A @ np.array([e.phi, e.y]), b) )
+            self.primal_prog.AddLinearConstraint(le(A @ np.array([e.phi, e.y]), b))
             # flow and right variable belong to an order increase cone
-            self.primal_prog.AddLinearConstraint( le(A @ np.array([e.phi, e.z]), b) )
+            self.primal_prog.AddLinearConstraint(le(A @ np.array([e.phi, e.z]), b))
             # order increase constraint
-            self.primal_prog.AddLinearConstraint( e.y + e.phi == e.z )
+            self.primal_prog.AddLinearConstraint(e.y + e.phi == e.z)
 
         # for each vertex, add constraints
         for v in self.vertices.values():
@@ -139,7 +139,7 @@ class TSPasGCS:
             if v.name != self.target:
                 # add flow out is 1 constraint
                 flow_out = sum([self.edges[e].phi for e in v.edges_out])
-            
+
             # sum of ys = sum of zs
             sum_of_y = sum([self.edges[e].y for e in v.edges_out])
             sum_of_z = sum([self.edges[e].z for e in v.edges_in])
@@ -147,14 +147,14 @@ class TSPasGCS:
             if v.name == self.start:
                 self.primal_prog.AddLinearConstraint(sum_of_y == 0.0)
             elif v.name == self.target:
-                self.primal_prog.AddLinearConstraint(sum_of_z == self.n-1)
+                self.primal_prog.AddLinearConstraint(sum_of_z == self.n - 1)
             else:
                 self.primal_prog.AddLinearConstraint(sum_of_y == sum_of_z)
 
         # add cost
         self.primal_prog.AddLinearCost(sum([e.phi * e.cost for e in self.edges.values()]))
-        
-    def solve_primal(self, convex_relaxation = True):
+
+    def solve_primal(self, convex_relaxation=True):
         # build the program
         x = timeit()
         self.build_primal_optimization_program(convex_relaxation)
@@ -173,15 +173,16 @@ class TSPasGCS:
             return
 
         flows = [self.primal_solution.GetSolution(e.phi) for e in self.edges.values()]
-        not_tight = np.any(
-            np.logical_and(0.01 < np.array(flows), np.array(flows) < 0.99)
-        )
+        not_tight = np.any(np.logical_and(0.01 < np.array(flows), np.array(flows) < 0.99))
         if not_tight:
             WARN("SOLUTION NOT TIGHT")
         else:
             YAY("SOLUTION IS TIGHT")
 
-def build_block_moving_gcs_tsp(start: npt.NDArray, target: npt.NDArray, block_dim: int, num_blocks: int) -> TSPasGCS:
+
+def build_block_moving_gcs_tsp(
+    start: npt.NDArray, target: npt.NDArray, block_dim: int, num_blocks: int
+) -> TSPasGCS:
     bd = block_dim
     num_objects = num_blocks + 1
     # check lengths

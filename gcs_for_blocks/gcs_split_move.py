@@ -26,9 +26,7 @@ class GCSforBlocksSplitMove(GCSforBlocks):
         self.add_vertex(start_state, "start")
         # add vertices into horizon 0
         for set_id in self.sets_per_mode[self.start_mode]:
-            self.add_vertex(
-                self.get_convex_set_for_set_id(set_id), self.get_vertex_name(0, set_id)
-            )
+            self.add_vertex(self.get_convex_set_for_set_id(set_id), self.get_vertex_name(0, set_id))
             self.add_vertex(
                 self.get_convex_set_for_set_id(set_id),
                 self.get_vertex_name(0, set_id, "T"),
@@ -79,17 +77,13 @@ class GCSforBlocksSplitMove(GCSforBlocks):
                     # add edges into vertex from the previous layer
                     if layer > 0:
                         edges_in = self.get_edges_into_set_out_of_mode(set_id)
-                        names_of_edges_in = self.set_names_for_layer(
-                            edges_in, layer - 1
-                        )
+                        names_of_edges_in = self.set_names_for_layer(edges_in, layer - 1)
                         if mode != 0:
                             names_of_edges_in = ["T" + x[1:] for x in names_of_edges_in]
                             self.connect_to_vertex_on_the_left(
                                 names_of_edges_in,
                                 vertex_name,
-                                EdgeOptions.mode_transition_edge(
-                                    self.opt.add_grasp_cost
-                                ),
+                                EdgeOptions.mode_transition_edge(self.opt.add_grasp_cost),
                             )
                         else:
                             self.connect_to_vertex_on_the_left(
@@ -128,9 +122,7 @@ class GCSforBlocksSplitMove(GCSforBlocks):
             if self.target_mode in self.modes_per_layer[layer]:
                 # for each set that contains the target
                 for set_id in sets_with_target:
-                    names_of_sets_with_target += [
-                        self.get_vertex_name(layer, set_id, "T")
-                    ]
+                    names_of_sets_with_target += [self.get_vertex_name(layer, set_id, "T")]
         # add the edges
         self.connect_to_vertex_on_the_left(
             names_of_sets_with_target, "target", EdgeOptions.within_mode_edge()

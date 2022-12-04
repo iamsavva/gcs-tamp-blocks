@@ -25,9 +25,7 @@ class GCSsetGenerator:
     ###################################################################################
     # Orbital sets and constraints
 
-    def get_orbit_set_for_mode_equality(
-        self, mode: int
-    ) -> T.Tuple[npt.NDArray, npt.NDArray]:
+    def get_orbit_set_for_mode_equality(self, mode: int) -> T.Tuple[npt.NDArray, npt.NDArray]:
         """
         When in mode k, the orbit is such that x_m-y_m = 0 for m not k nor 0.
         Produces convex set in a form A [x, y]^T = b
@@ -105,9 +103,7 @@ class GCSsetGenerator:
         b = np.hstack((ub, -lb))
         return AA, b
 
-    def get_plane_for_grasping_modes_equality(
-        self, mode: int
-    ) -> T.Tuple[npt.NDArray, npt.NDArray]:
+    def get_plane_for_grasping_modes_equality(self, mode: int) -> T.Tuple[npt.NDArray, npt.NDArray]:
         """
         When gasping block m, x_0 = x_m. The plane of possible states when in mode k is given by
         x_0 - x_k = 0.
@@ -132,9 +128,7 @@ class GCSsetGenerator:
         A, b = self.get_plane_for_grasping_modes_equality(mode)
         return self.get_inequality_form_from_equality_form(A, b)
 
-    def get_convex_set_for_mode_inequality(
-        self, mode: int
-    ) -> T.Tuple[npt.NDArray, npt.NDArray]:
+    def get_convex_set_for_mode_inequality(self, mode: int) -> T.Tuple[npt.NDArray, npt.NDArray]:
         """
         Convex set for mode 0 is just the bounding box.
         Convex set for mode k is the bounding box and a plane.
@@ -248,17 +242,13 @@ class GCSsetGenerator:
         x_0, N = self.transformation_between_configuration_and_mode_space(mode)
         return A.dot(N), (b - A.dot(x_0))
 
-    def configuration_space_obstacle_in_mode_space(
-        self, mode: int, block: int
-    ) -> HPolyhedron:
+    def configuration_space_obstacle_in_mode_space(self, mode: int, block: int) -> HPolyhedron:
         """
         See inequality_polyhedron_in_mode_space_inequality.
         """
         # get obstacle
         A, b = self.obstacle_in_configuration_space_inequality(block)
-        A_m, b_m = self.configuration_space_inequality_in_mode_space_inequality(
-            mode, A, b
-        )
+        A_m, b_m = self.configuration_space_inequality_in_mode_space_inequality(mode, A, b)
         return HPolyhedron(A_m, b_m)
 
     def mode_space_polyhedron_in_configuration_space(
@@ -281,9 +271,7 @@ class GCSsetGenerator:
         NEEDS TESTING
         """
 
-        def combine_sets(
-            A_1: npt.NDArray, A_2: npt.NDArray, b_1: npt.NDArray, b_2: npt.NDArray
-        ):
+        def combine_sets(A_1: npt.NDArray, A_2: npt.NDArray, b_1: npt.NDArray, b_2: npt.NDArray):
             A, b = np.vstack((A_1, A_2)), np.hstack((b_1, b_2))
             return HPolyhedron(A, b)
 
@@ -321,8 +309,7 @@ class GCSsetGenerator:
         # add in-mode constraint to each polyhedron (TODO: this should be redundant?)
         A_mode, b_mode = self.get_convex_set_for_mode_inequality(mode)
         convex_sets_for_mode = [
-            combine_sets(A_mode, c.A(), b_mode, c.b())
-            for c in configuration_space_tesselation
+            combine_sets(A_mode, c.A(), b_mode, c.b()) for c in configuration_space_tesselation
         ]
         INFO("Iris finished mode", mode)
         return convex_sets_for_mode

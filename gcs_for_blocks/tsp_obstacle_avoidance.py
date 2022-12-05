@@ -28,6 +28,8 @@ class BlockMovingObstacleAvoidance:
         assert len(target_pos) == len(start_pos)
         self.edges = dict()  # type: T.Dict[str, Edge]
         self.vertices = dict()  # type: T.Dict[str, Vertex]
+        self.start_pos = np.array(start_pos)
+        self.target_pos = np.array(target_pos)
         self.start_arm_pos = np.array(start_pos[0])
         self.target_arm_pos = np.array(target_pos[0])
         self.start_block_pos = [np.array(x) for x in start_pos[1:]]
@@ -151,9 +153,9 @@ class BlockMovingObstacleAvoidance:
             self.prog.AddLinearConstraint(le(A @ np.array([e.left_order, e.phi]), b))
             self.prog.AddLinearConstraint(le(A @ np.array([e.right_order, e.phi]), b))
             # perspective constraints on visits
-            A, b = visitation_box.get_hpolyhedron()
-            self.prog.AddLinearConstraint(le(A @ e.left_v, b))
-            self.prog.AddLinearConstraint(le(A @ e.right_v, b))
+            A, b = visitation_box.get_perspective_hpolyhedron()
+            self.prog.AddLinearConstraint(le(A @ np.append(e.left_v, e.phi), b))
+            self.prog.AddLinearConstraint(le(A @ np.append(e.right_v, e.phi), b))
             # increasing order
             self.prog.AddLinearConstraint(e.left_order + e.phi == e.right_order)
             # over all tsp edges, visit is same
@@ -255,7 +257,9 @@ class BlockMovingObstacleAvoidance:
             )
 
     def solve(self):
+        x = timeit()
         self.solution = Solve(self.prog)
+        x.dt("Solving the program")
         if self.solution.is_success():
             YAY("Optimal primal cost is %.5f" % self.solution.get_optimal_cost())
         else:
@@ -269,3 +273,60 @@ class BlockMovingObstacleAvoidance:
             WARN("CONVEX RELAXATION NOT TIGHT")
         else:
             YAY("CONVEX RELAXATION IS TIGHT")
+
+    def get_drawing_stuff(self):
+        flow_vars = [(e, self.solution.GetSolution(e.phi)) for e in self.edges.values()]
+        non_zero_edges = [e for (e, flow) in flow_vars if flow > 0.01]
+        v_path, e_path = self.find_path_to_target(non_zero_edges, self.vertices[self.start])
+
+        now_pose = self.start_pos.copy()
+        now_mode = 'start'
+        poses = []
+        modes = []
+        def add_me(pose):
+            p = pose.copy()
+            p.resize(p.size)
+            # if mode not in ("start", "target"):
+            #     mode = str(int(mode)+1)
+            poses.append(p)
+            modes.append(0)
+    
+
+        i = 0
+        while i < len(v_path):
+            try:
+                print(v_path[i].block_index, self.solution.GetSolution(v_path[i].v))
+            except:
+                pass
+            if v_path[i].value is not None:
+                now_pose[0] = v_path[i].value
+            else:
+                npq = self.solution.GetSolution(e_path[i].right_pos)
+                now_pose[0] = npq
+                now_pose[v_path[i].block_index+1] = npq
+            add_me(now_pose)
+            i += 1
+        return np.array(poses), modes
+
+
+    def find_path_to_target(self, edges, start):
+        """Given a set of active edges, find a path from start to target"""
+        edges_out = [e for e in edges if e.left == start]
+        assert len(edges_out) == 1
+        current_edge = edges_out[0]
+        v = current_edge.right
+
+        target_reached = v.name == self.target
+
+        if target_reached:
+            return [start] + [v], [current_edge]
+        else:
+            v, e = self.find_path_to_target(edges, v)
+            return [start] + v, [current_edge] + e
+
+
+    # flow_vars = [(e, primal_solution.GetSolution(e.phi)) for e in edges.values()]
+    # non_zero_edges = [e for (e, flow) in flow_vars if flow > 0.01]
+    # v_path, e_path = find_path_to_target(non_zero_edges, vertices[start_tsp])
+    # loc_path = [primal_solution.GetSolution(e.right_pos) for e in e_path]
+    # loc_path[0] = primal_solution.GetSolution(e_path[1].left_pos)

@@ -27,6 +27,7 @@ TEXT_COLOR = "#0B032D"
 BLACK = "#0B032D"
 BACKGROUND = "#F5E9E2"
 CELL_WIDTH = 50
+CELL_WIDTH = 90
 
 
 class Draw2DSolution:
@@ -46,7 +47,9 @@ class Draw2DSolution:
         self.cell_scaling = CELL_WIDTH
         self.block_size = CELL_WIDTH
         self.arm_size = CELL_WIDTH
+
         self.padding = self.block_size / 2
+        self.padding = 0
         self.border = 20
 
         self.mode = mode_solution
@@ -76,6 +79,7 @@ class Draw2DSolution:
         self.canvas = Canvas(
             top, width=self.width[0], height=self.width[1], background=BACKGROUND
         )
+        # print(self.width)
         self.canvas.pack()
         self.cells = {}
         self.environment = []
@@ -127,7 +131,7 @@ class Draw2DSolution:
                 self.grasp(state_next)
             mode_now = mode_next
             state_now = state_next
-            time.sleep(1.0)
+            # time.sleep(1.0)
 
     def move_from_to(self, state_now, state_next):
         delta = state_next - state_now
@@ -163,6 +167,9 @@ class Draw2DSolution:
     def draw_block(self, block_state, block_num):
         x, y = self.get_pixel_location(block_state)
         side = self.block_size / 2.0
+        # print(x)
+        # print(y)
+        # print(side)
         self.cells[(x, y)] = [
             self.canvas.create_rectangle(
                 x - side,
@@ -264,6 +271,8 @@ class Draw2DSolution:
             for i in range(self.num_modes):
                 self.draw_shadow(self.goal[2 * i : 2 * i + 2], i)
         else:
+            # print("oi")
+            # print(self.goal[0:2])
             self.draw_shadow(self.goal[0:2], "arm")
             for i in range(1, self.num_modes):
                 self.draw_shadow(self.goal[2 * i : 2 * i + 2], i)
@@ -277,14 +286,14 @@ if __name__ == "__main__":
 
     # gcs, ub, goal = make_simple_transparent_gcs_test(2,10,21, use_convex_relaxation=False, display_graph=False, max_rounded_paths=0, add_grasp_cost = False)
 
-    nb = 5
-    h = 11
+    nb = 2
+    h = 7
     seed = 5
     gcs, ub, goal = make_simple_transparent_gcs_test(
         2,
         nb,
         h,
-        use_convex_relaxation=True,
+        use_convex_relaxation=False,
         display_graph=False,
         max_rounded_paths=0,
         add_grasp_cost=False,

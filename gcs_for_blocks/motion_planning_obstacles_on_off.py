@@ -64,12 +64,12 @@ class MotionPlanning:
         self.add_mp_constraints_to_prog()
         self.add_mp_costs_to_prog()
 
-    def add_vertex(self, name: str, value: npt.NDArray = np.array([])):
+    def add_vertex(self, name: str, value = None):
         assert name not in self.vertices, "Vertex with name " + name + " already exists"
         assert name not in self.all_vertices, (
             "Vertex with name " + name + " already exists in og"
         )
-        self.all_vertices[name] = Vertex(name, value)
+        self.all_vertices[name] = Vertex(name, value, block_index = self.moving_block_index)
         self.vertices[name] = self.all_vertices[name]
 
     def add_edge(self, left_name: str, right_name: str):

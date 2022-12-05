@@ -12,7 +12,7 @@ from .axis_aligned_set_tesselation_2d import Box
 
 
 class Vertex:
-    def __init__(self, name: str, value: npt.NDArray = np.array([]), block_index=None):
+    def __init__(self, name: str, value = None, block_index=None):
         self.value = value  # effectively just the name
         self.name = name  # name of the vertex
         self.edges_in = []  # str names of edges in

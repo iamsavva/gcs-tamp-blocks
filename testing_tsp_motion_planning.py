@@ -112,3 +112,4 @@ loc_path[0] = primal_solution.GetSolution(e_path[1].left_pos)
 plot_list_of_aligned_sets(
     convex_sets, bounding_box, visitations, moving_block_index, loc_path
 )
+

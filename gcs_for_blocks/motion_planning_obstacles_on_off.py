@@ -123,6 +123,24 @@ class MotionPlanning(TSPasGCS):
         else:
             YAY("CONVEX RELAXATION IS TIGHT")
 
+        flow_vars = [(e, self.primal_solution.GetSolution(e.phi)) for e in self.edges.values()]
+        for (e, flow) in flow_vars:
+            if flow > 0.01:
+                print(e.name, flow)
+
+        non_zero_flows = [e for (e, flow) in flow_vars if flow > 0.01]
+        e0 = self.edges["s0_tsp_s0"]
+
+
+        
+
+        for e in self.edges.values():
+            if self.primal_solution.GetSolution(e.phi) > 0.01:
+                if e.name != "s0_tsp_s0" and not np.allclose(self.primal_solution.GetSolution(e.y), self.primal_solution.GetSolution(e.z)):
+                    print(e.name, self.primal_solution.GetSolution(e.y), self.primal_solution.GetSolution(e.z))
+
+        
+
         
     def add_variables(self, convex_relaxation=True):
         ####################################
@@ -200,6 +218,8 @@ class MotionPlanning(TSPasGCS):
                 self.prog.AddLinearConstraint(flow_in == 1)
             else:
                 self.prog.AddLinearConstraint(flow_in == flow_out)
+                self.prog.AddLinearConstraint(flow_in <= 1)
+                self.prog.AddLinearConstraint(flow_out <= 1)
         
         ###################################
         # PER EDGE
@@ -247,6 +267,7 @@ class MotionPlanning(TSPasGCS):
                 A = np.array([[1,0,-1,0],[0,1,0,-1]])
                 b = np.array([0,0])
                 self.prog.AddL2NormCostUsingConicConstraint(A, b, np.append(e.y, e.z))
+                self.prog.AddLinearCost(0.1*e.phi)
             
 
             

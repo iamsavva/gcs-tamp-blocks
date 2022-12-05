@@ -208,11 +208,9 @@ def locations_to_aligned_sets(start, target, block_width):
 
 
 def plot_list_of_aligned_sets(sets, bounding_box, visitations = None):
-
     colors = cm.rainbow(np.linspace(0, 1, 30))
     _, ax = plt.subplots()
     index = 0
-    print(len(sets))
     for a_set in sets.values():
         index += 1
         if visitations is None:

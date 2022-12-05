@@ -65,9 +65,7 @@ class BlockMovingObstacleAvoidance:
     def add_edge(self, left_name: str, right_name: str):
         edge_name = left_name + "_" + right_name
         assert edge_name not in self.edges, "Edge " + edge_name + " already exists"
-        self.edges[edge_name] = Edge(
-            self.vertices[left_name], self.vertices[right_name], edge_name
-        )
+        self.edges[edge_name] = Edge(self.vertices[left_name], self.vertices[right_name], edge_name)
         self.vertices[left_name].add_edge_out(edge_name)
         self.vertices[right_name].add_edge_in(edge_name)
 
@@ -117,12 +115,8 @@ class BlockMovingObstacleAvoidance:
 
         for e in self.edges.values():
             # left and right visitation
-            e.set_left_v(
-                self.prog.NewContinuousVariables(self.num_blocks, "left_v_" + e.name)
-            )
-            e.set_right_v(
-                self.prog.NewContinuousVariables(self.num_blocks, "right_v_" + e.name)
-            )
+            e.set_left_v(self.prog.NewContinuousVariables(self.num_blocks, "left_v_" + e.name))
+            e.set_right_v(self.prog.NewContinuousVariables(self.num_blocks, "right_v_" + e.name))
 
             # add flow variable
             if self.convex_relaxation:
@@ -132,12 +126,8 @@ class BlockMovingObstacleAvoidance:
                 e.set_phi(self.prog.NewBinaryVariables(1, "phi_" + e.name)[0])
 
             # left and right order
-            e.set_left_order(
-                self.prog.NewContinuousVariables(1, "left_order_" + e.name)[0]
-            )
-            e.set_right_order(
-                self.prog.NewContinuousVariables(1, "right_order" + e.name)[0]
-            )
+            e.set_left_order(self.prog.NewContinuousVariables(1, "left_order_" + e.name)[0])
+            e.set_right_order(self.prog.NewContinuousVariables(1, "right_order" + e.name)[0])
 
     def add_tsp_constraints_to_prog(self):
         # for each edge, add constraints
@@ -195,9 +185,7 @@ class BlockMovingObstacleAvoidance:
             elif v.name[0] == "s":
                 # it's a start block vertex
                 # flow in is 1
-                self.prog.AddLinearConstraint(
-                    flow_in == 1
-                )  # flow out is set in motion planning
+                self.prog.AddLinearConstraint(flow_in == 1)  # flow out is set in motion planning
                 # vertex order is sum of orders in
                 self.prog.AddLinearConstraint(v.order == order_in)
                 # vertex visit is sum of visits in
@@ -211,9 +199,7 @@ class BlockMovingObstacleAvoidance:
             elif v.name[0] == "t":
                 # it's a target block vertex
                 # flow out is 1
-                self.prog.AddLinearConstraint(
-                    flow_out == 1
-                )  # flow in is set in motion planning
+                self.prog.AddLinearConstraint(flow_out == 1)  # flow in is set in motion planning
                 # vertex order is sum of orders out
                 self.prog.AddLinearConstraint(v.order == order_out)
                 # vertex visit is sum of visits out
@@ -280,9 +266,10 @@ class BlockMovingObstacleAvoidance:
         v_path, e_path = self.find_path_to_target(non_zero_edges, self.vertices[self.start])
 
         now_pose = self.start_pos.copy()
-        now_mode = 'start'
+        now_mode = "start"
         poses = []
         modes = []
+
         def add_me(pose):
             p = pose.copy()
             p.resize(p.size)
@@ -290,7 +277,6 @@ class BlockMovingObstacleAvoidance:
             #     mode = str(int(mode)+1)
             poses.append(p)
             modes.append(0)
-    
 
         i = 0
         while i < len(v_path):
@@ -303,11 +289,10 @@ class BlockMovingObstacleAvoidance:
             else:
                 npq = self.solution.GetSolution(e_path[i].right_pos)
                 now_pose[0] = npq
-                now_pose[v_path[i].block_index+1] = npq
+                now_pose[v_path[i].block_index + 1] = npq
             add_me(now_pose)
             i += 1
         return np.array(poses), modes
-
 
     def find_path_to_target(self, edges, start):
         """Given a set of active edges, find a path from start to target"""
@@ -323,7 +308,6 @@ class BlockMovingObstacleAvoidance:
         else:
             v, e = self.find_path_to_target(edges, v)
             return [start] + v, [current_edge] + e
-
 
     # flow_vars = [(e, primal_solution.GetSolution(e.phi)) for e in edges.values()]
     # non_zero_edges = [e for (e, flow) in flow_vars if flow > 0.01]

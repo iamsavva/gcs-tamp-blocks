@@ -16,11 +16,11 @@ from gcs_for_blocks.tsp_obstacle_avoidance import BlockMovingObstacleAvoidance
 from draw_2d import Draw2DSolution
 
 bounding_box = AlignedSet(b=0, a=5, l=0, r=10)
-ub = np.array([bounding_box.r+1, bounding_box.a])
+ub = np.array([bounding_box.r + 1, bounding_box.a])
 block_width = 1
 
-start = [(1, 4), (1, 1), (1,3), (3,3), (3, 1)]
-target = [(1, 4), (9, 1), (7,1), (7,3), (9, 3)]
+start = [(1, 4), (1, 1), (1, 3), (3, 3), (3, 1)]
+target = [(1, 4), (9, 1), (7, 1), (7, 3), (9, 3)]
 
 convex_relaxation = False
 
@@ -38,5 +38,5 @@ poses, modes = prog.get_drawing_stuff()
 
 tpose = prog.target_pos.copy()
 tpose.resize(tpose.size)
-drawer = Draw2DSolution(prog.num_blocks+1, ub, modes, poses, tpose, fast=True, no_arm = False)  # type: ignore
+drawer = Draw2DSolution(prog.num_blocks + 1, ub, modes, poses, tpose, fast=True, no_arm=False)  # type: ignore
 drawer.draw_solution()

@@ -55,10 +55,7 @@ class timeit:
         if descriptor is None:
             INFO("%.3fs since the start" % (self.times[-1] - self.times[0]))
         else:
-            INFO(
-                descriptor
-                + " took %.3fs since the start" % (self.times[-1] - self.times[0])
-            )
+            INFO(descriptor + " took %.3fs since the start" % (self.times[-1] - self.times[0]))
 
     def start(self):
         self.a_start = time.time()
@@ -97,9 +94,7 @@ def ChebyshevCenter(poly: HPolyhedron):
     for i in range(m):
         a[0, 0] = np.linalg.norm(poly.A()[i, :])
         a[0, 1:] = poly.A()[i, :]
-        prog.AddLinearConstraint(
-            a, -np.array([big_num]), np.array([poly.b()[i]]), np.append(r, x)
-        )
+        prog.AddLinearConstraint(a, -np.array([big_num]), np.array([poly.b()[i]]), np.append(r, x))
 
     result = Solve(prog)
     if not result.is_success():

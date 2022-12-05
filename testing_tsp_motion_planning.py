@@ -44,13 +44,9 @@ vertices[target_tsp] = Vertex(target_tsp)
 # add variables to start and target vertices
 # associated vaiables are visitations, n x 1, each 0 or 1
 vertices[start_tsp].set_v(prog.NewContinuousVariables(num_blocks, "visit_" + start_tsp))
-vertices[target_tsp].set_v(
-    prog.NewContinuousVariables(num_blocks, "visit_" + target_tsp)
-)
+vertices[target_tsp].set_v(prog.NewContinuousVariables(num_blocks, "visit_" + target_tsp))
 # visitation constraints
-visitation_box = Box(
-    lb=np.zeros(num_blocks), ub=np.ones(num_blocks), state_dim=num_blocks
-)
+visitation_box = Box(lb=np.zeros(num_blocks), ub=np.ones(num_blocks), state_dim=num_blocks)
 vA, vb = visitation_box.get_hpolyhedron()
 v = vertices[start_tsp]
 prog.AddLinearConstraint(le(vA @ v.v, vb))
@@ -109,7 +105,4 @@ v_path, e_path = find_path_to_target(non_zero_edges, vertices[start_tsp])
 loc_path = [primal_solution.GetSolution(e.right_pos) for e in e_path]
 loc_path[0] = primal_solution.GetSolution(e_path[1].left_pos)
 
-plot_list_of_aligned_sets(
-    convex_sets, bounding_box, visitations, moving_block_index, loc_path
-)
-
+plot_list_of_aligned_sets(convex_sets, bounding_box, visitations, moving_block_index, loc_path)

@@ -76,9 +76,7 @@ class Draw2DSolution:
         top.wm_title("Moving Blocks")
         top.protocol("WM_DELETE_WINDOW", top.destroy)
 
-        self.canvas = Canvas(
-            top, width=self.width[0], height=self.width[1], background=BACKGROUND
-        )
+        self.canvas = Canvas(top, width=self.width[0], height=self.width[1], background=BACKGROUND)
         # print(self.width)
         self.canvas.pack()
         self.cells = {}

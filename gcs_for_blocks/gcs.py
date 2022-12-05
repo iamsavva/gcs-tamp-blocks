@@ -66,9 +66,7 @@ class GCSforBlocks:
         # edges matrix for a mode graph
         self.mode_graph_edges = np.empty([])  # np.NDArray, size num_modes x num_modes
         # edge matrix for a set graph
-        self.set_graph_edges = np.array(
-            []
-        )  # np.NDArray, size num_gcs_sets x num_gcs_sets
+        self.set_graph_edges = np.array([])  # np.NDArray, size num_gcs_sets x num_gcs_sets
         # get polyhedron that describes a set
         self.set_id_to_polyhedron = dict()  # T.Dict[int, HPolyhedron]
         self.opt.num_gcs_sets = -1  # int, numer of GCS sets.
@@ -116,9 +114,7 @@ class GCSforBlocks:
         self.add_vertex(start_state, "start")
         # add vertices into horizon 0
         for set_id in self.sets_per_mode[self.start_mode]:
-            self.add_vertex(
-                self.get_convex_set_for_set_id(set_id), self.get_vertex_name(0, set_id)
-            )
+            self.add_vertex(self.get_convex_set_for_set_id(set_id), self.get_vertex_name(0, set_id))
         # add vertices into horizon 1 through last
         for layer in range(1, self.opt.horizon):
             for mode in self.modes_per_layer[layer]:
@@ -157,9 +153,7 @@ class GCSforBlocks:
                     # add edges into vertex from the previous layer
                     if layer > 0:
                         edges_in = self.get_edges_into_set_out_of_mode(set_id)
-                        names_of_edges_in = self.set_names_for_layer(
-                            edges_in, layer - 1
-                        )
+                        names_of_edges_in = self.set_names_for_layer(edges_in, layer - 1)
                         self.connect_to_vertex_on_the_left(
                             names_of_edges_in,
                             vertex_name,
@@ -282,9 +276,7 @@ class GCSforBlocks:
 
     ###################################################################################
     # Adding constraints and cost terms
-    def add_orbital_constraint(
-        self, left_mode: int, edge: GraphOfConvexSets.Edge
-    ) -> None:
+    def add_orbital_constraint(self, left_mode: int, edge: GraphOfConvexSets.Edge) -> None:
         """
         READY
         Add orbital constraints on the edge
@@ -292,9 +284,7 @@ class GCSforBlocks:
         """
         xu, xv = edge.xu(), edge.xv()
         orbital_constraint = self.set_gen.get_orbital_constraint(left_mode)
-        edge.AddConstraint(
-            Binding[LinearEqualityConstraint](orbital_constraint, np.append(xv, xu))
-        )
+        edge.AddConstraint(Binding[LinearEqualityConstraint](orbital_constraint, np.append(xv, xu)))
 
     def add_common_set_at_transition_constraint(
         self, left_vertex_set_id: int, edge: GraphOfConvexSets.Edge
@@ -370,9 +360,7 @@ class GCSforBlocks:
             # mode 0 is collision free and hence has just a single set in it
             # TODO: this is not the case if i have obstacles
             self.sets_per_mode[0] = {0}
-            self.set_id_to_polyhedron[
-                0
-            ] = self.set_gen.get_convex_set_for_mode_polyhedron(0)
+            self.set_id_to_polyhedron[0] = self.set_gen.get_convex_set_for_mode_polyhedron(0)
             set_indexer = 1
             # for each mode
             for mode in range(1, self.opt.num_modes):
@@ -440,9 +428,7 @@ class GCSforBlocks:
                 sets_with_my_set += [set_in_mode]
                 if just_one:
                     break
-        assert (
-            len(sets_with_my_set) > 0
-        ), "No set in given mode intersect with the given set!"
+        assert len(sets_with_my_set) > 0, "No set in given mode intersect with the given set!"
         return sets_with_my_set
 
     ###################################################################################
@@ -522,9 +508,7 @@ class GCSforBlocks:
                     convex_set = self.get_convex_set_for_set_id(set_id)
                     for other_set_id in sets_in_mode:
                         if set_id != other_set_id:
-                            other_convex_set = self.get_convex_set_for_set_id(
-                                other_set_id
-                            )
+                            other_convex_set = self.get_convex_set_for_set_id(other_set_id)
                             if convex_set.IntersectsWith(other_convex_set):
                                 self.set_graph_edges[set_id, other_set_id] = 1
                                 self.set_graph_edges[other_set_id, set_id] = 1
@@ -551,9 +535,7 @@ class GCSforBlocks:
         READY
         If a mode belongs to a layer, all of its sets belong to a layer.
         """
-        assert (
-            len(self.modes_per_layer) == self.opt.horizon
-        ), "Must populate modes per layer first"
+        assert len(self.modes_per_layer) == self.opt.horizon, "Must populate modes per layer first"
         # for each layer up to the horizon
         for layer in range(self.opt.horizon):
             self.sets_per_layer[layer] = set()
@@ -574,11 +556,7 @@ class GCSforBlocks:
         """
         assert 0 <= set_id < self.opt.num_gcs_sets, "Set number out of bounds"
         if self.opt.problem_complexity == "transparent-no-obstacles":
-            return [
-                v
-                for v in range(self.opt.num_gcs_sets)
-                if self.set_graph_edges[v, set_id] == 1
-            ]
+            return [v for v in range(self.opt.num_gcs_sets) if self.set_graph_edges[v, set_id] == 1]
         elif self.opt.problem_complexity == "obstacles":
             edges = []
             mode = self.get_mode_from_set_id(set_id)
@@ -621,11 +599,7 @@ class GCSforBlocks:
         """
         assert 0 <= set_id < self.opt.num_gcs_sets, "Set number out of bounds"
         if self.opt.problem_complexity == "transparent-no-obstacles":
-            return [
-                v
-                for v in range(self.opt.num_gcs_sets)
-                if self.set_graph_edges[set_id, v] == 1
-            ]
+            return [v for v in range(self.opt.num_gcs_sets) if self.set_graph_edges[set_id, v] == 1]
         elif self.opt.problem_complexity == "obstacles":
             edges = []
             mode = self.get_mode_from_set_id(set_id)
@@ -642,14 +616,12 @@ class GCSforBlocks:
         raise NotImplementedError
 
     def get_edges_into_set(self, set_id):
-        return self.get_edges_into_set_out_of_mode(
-            set_id
-        ) + self.get_edges_within_same_mode(set_id)
+        return self.get_edges_into_set_out_of_mode(set_id) + self.get_edges_within_same_mode(set_id)
 
     def get_edges_out_of_set(self, set_id):
-        return self.get_edges_out_of_set_out_of_mode(
+        return self.get_edges_out_of_set_out_of_mode(set_id) + self.get_edges_within_same_mode(
             set_id
-        ) + self.get_edges_within_same_mode(set_id)
+        )
 
     def get_edges_out_of_mode(self, mode: int) -> T.List[int]:
         """
@@ -657,9 +629,7 @@ class GCSforBlocks:
         Use the edge matrix to determine which edges go out of the vertex.
         """
         assert 0 <= mode < self.opt.num_modes, "Mode out of bounds"
-        return [
-            v for v in range(self.opt.num_modes) if self.mode_graph_edges[mode, v] == 1
-        ]
+        return [v for v in range(self.opt.num_modes) if self.mode_graph_edges[mode, v] == 1]
 
     def get_edges_into_mode(self, mode: int) -> T.List[int]:
         """
@@ -667,9 +637,7 @@ class GCSforBlocks:
         Use the edge matrix to determine which edges go out of the vertex.
         """
         assert 0 <= mode < self.opt.num_modes, "Mode out of bounds"
-        return [
-            v for v in range(self.opt.num_modes) if self.mode_graph_edges[v, mode] == 1
-        ]
+        return [v for v in range(self.opt.num_modes) if self.mode_graph_edges[v, mode] == 1]
 
     ###################################################################################
     # Vertex and edge naming
@@ -740,18 +708,14 @@ class GCSforBlocks:
         start = time.time()
         self.solution = self.gcs.SolveShortestPath(start_vertex, target_vertex, options)
         if self.solution.is_success():
-            YAY(
-                "Solving GCS took %.2f seconds" % (time.time() - start), verbose=verbose
-            )
+            YAY("Solving GCS took %.2f seconds" % (time.time() - start), verbose=verbose)
             YAY(
                 "Optimal cost is %.5f" % self.solution.get_optimal_cost(),
                 verbose=verbose,
             )
         else:
             ERROR("SOLVE FAILED!", verbose=verbose)
-            ERROR(
-                "Solving GCS took %.2f seconds" % (time.time() - start), verbose=verbose
-            )
+            ERROR("Solving GCS took %.2f seconds" % (time.time() - start), verbose=verbose)
         if show_graph:
             self.display_graph(graph_name)
 
@@ -773,9 +737,7 @@ class GCSforBlocks:
         for v in self.gcs.Vertices():
             if np.any(np.isnan(self.solution.GetSolution(v.x()))):
                 self.gcs.RemoveVertex(v.id())
-            if np.allclose(
-                self.solution.GetSolution(v.x()), np.zeros(self.opt.state_dim)
-            ):
+            if np.allclose(self.solution.GetSolution(v.x()), np.zeros(self.opt.state_dim)):
                 self.gcs.RemoveVertex(v.id())
         self.solve(
             use_convex_relaxation=use_convex_relaxation,
@@ -838,9 +800,7 @@ class GCSforBlocks:
         if not_tight:
             WARN("Solution s not tight, returning A path, not THE optimal path")
 
-        active_edges = [
-            edge for edge, flow in zip(self.gcs.Edges(), flow_results) if flow > 0.0
-        ]
+        active_edges = [edge for edge, flow in zip(self.gcs.Edges(), flow_results) if flow > 0.0]
         if not_tight:
             # gen random paths
             vertex_paths, edge_paths = [], []
@@ -857,17 +817,11 @@ class GCSforBlocks:
                 for e in self.gcs.Edges():
                     if e not in edges:
                         e.AddPhiConstraint(False)
-                self.solve(
-                    use_convex_relaxation=False, max_rounded_paths=0, verbose=False
-                )
+                self.solve(use_convex_relaxation=False, max_rounded_paths=0, verbose=False)
                 active_edges = [
-                    edge
-                    for edge, flow in zip(self.gcs.Edges(), flow_results)
-                    if flow > 0.0
+                    edge for edge, flow in zip(self.gcs.Edges(), flow_results) if flow > 0.0
                 ]
-                v_path, _ = self.find_path_to_target(
-                    active_edges, self.name_to_vertex["start"]
-                )
+                v_path, _ = self.find_path_to_target(active_edges, self.name_to_vertex["start"])
                 v_name_path = [v.name() for v in v_path]
                 cost = self.solution.get_optimal_cost()
                 self.gcs.ClearAllPhiConstraints()

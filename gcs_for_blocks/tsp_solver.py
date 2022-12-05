@@ -12,7 +12,7 @@ from .axis_aligned_set_tesselation_2d import Box
 
 
 class Vertex:
-    def __init__(self, name: str, value = None, block_index=None):
+    def __init__(self, name: str, value=None, block_index=None):
         self.value = value  # effectively just the name
         self.name = name  # name of the vertex
         self.edges_in = []  # str names of edges in
@@ -23,9 +23,7 @@ class Vertex:
         self.order = None
 
     def set_block_index(self, block_index: int):
-        assert self.block_index is None, (
-            "Block index for " + self.name + " is already set"
-        )
+        assert self.block_index is None, "Block index for " + self.name + " is already set"
         self.block_index = block_index
 
     def add_edge_in(self, nbh: str):
@@ -46,9 +44,7 @@ class Vertex:
 
 
 class Edge:
-    def __init__(
-        self, left_vertex: Vertex, right_vertex: Vertex, name: str, cost: float = None
-    ):
+    def __init__(self, left_vertex: Vertex, right_vertex: Vertex, name: str, cost: float = None):
         self.left = left_vertex
         self.right = right_vertex
         self.name = name
@@ -115,9 +111,7 @@ class TSPasGCS:
         assert name not in self.vertices, "Vertex with name " + name + " already exists"
         self.vertices[name] = Vertex(name, value)
 
-    def add_edge(
-        self, left_name: str, right_name: str, edge_name: str = None, cost: float = None
-    ):
+    def add_edge(self, left_name: str, right_name: str, edge_name: str = None, cost: float = None):
         if edge_name is None:
             edge_name = left_name + "_" + right_name
         assert edge_name not in self.edges, "Edge " + edge_name + " already exists"
@@ -150,9 +144,7 @@ class TSPasGCS:
             e.set_y(self.primal_prog.NewContinuousVariables(1, "y_" + e.name)[0])
             e.set_z(self.primal_prog.NewContinuousVariables(1, "z_" + e.name)[0])
             if convex_relaxation:
-                e.set_phi(
-                    self.primal_prog.NewContinuousVariables(1, "phi_" + e.name)[0]
-                )
+                e.set_phi(self.primal_prog.NewContinuousVariables(1, "phi_" + e.name)[0])
             else:
                 e.set_phi(self.primal_prog.NewBinaryVariables(1, "phi_" + e.name)[0])
 
@@ -168,37 +160,21 @@ class TSPasGCS:
             if e.left.name == self.start:
                 order_box_origin = Box(lb=np.array([0]), ub=np.array([0]), state_dim=1)
                 oA, ob = order_box_origin.get_perspective_hpolyhedron()
-                self.primal_prog.AddLinearConstraint(
-                    le(oA @ np.array([e.y, e.phi]), ob)
-                )
+                self.primal_prog.AddLinearConstraint(le(oA @ np.array([e.y, e.phi]), ob))
             elif e.left.name[0] == "s":
-                self.primal_prog.AddLinearConstraint(
-                    le(A1 @ np.array([e.y, e.phi]), b1)
-                )
+                self.primal_prog.AddLinearConstraint(le(A1 @ np.array([e.y, e.phi]), b1))
             else:
-                self.primal_prog.AddLinearConstraint(
-                    le(A2 @ np.array([e.y, e.phi]), b2)
-                )
+                self.primal_prog.AddLinearConstraint(le(A2 @ np.array([e.y, e.phi]), b2))
 
             if e.right.name == self.target:
-                target_box = Box(
-                    lb=np.array([self.n - 2]), ub=np.array([self.n - 2]), state_dim=1
-                )
+                target_box = Box(lb=np.array([self.n - 2]), ub=np.array([self.n - 2]), state_dim=1)
                 tA, tb = target_box.get_perspective_hpolyhedron()
-                self.primal_prog.AddLinearConstraint(
-                    le(tA @ np.array([e.y, e.phi]), tb)
-                )
-                self.primal_prog.AddLinearConstraint(
-                    le(A2 @ np.array([e.z, e.phi]), b2)
-                )
+                self.primal_prog.AddLinearConstraint(le(tA @ np.array([e.y, e.phi]), tb))
+                self.primal_prog.AddLinearConstraint(le(A2 @ np.array([e.z, e.phi]), b2))
             elif e.right.name[0] == "s":
-                self.primal_prog.AddLinearConstraint(
-                    le(A1 @ np.array([e.z, e.phi]), b1)
-                )
+                self.primal_prog.AddLinearConstraint(le(A1 @ np.array([e.z, e.phi]), b1))
             else:
-                self.primal_prog.AddLinearConstraint(
-                    le(A2 @ np.array([e.z, e.phi]), b2)
-                )
+                self.primal_prog.AddLinearConstraint(le(A2 @ np.array([e.z, e.phi]), b2))
 
             # order increase constraint
             self.primal_prog.AddLinearConstraint(e.y + e.phi == e.z)
@@ -241,12 +217,10 @@ class TSPasGCS:
         left_pot_sum = (self.n / 2) * (self.n / 2 - 1)
         right_pot_sum = (self.n - 1) * self.n / 2 - left_pot_sum
         self.primal_prog.AddLinearConstraint(
-            sum([e.z for e in self.edges.values() if e.right.name in left_vs])
-            == left_pot_sum
+            sum([e.z for e in self.edges.values() if e.right.name in left_vs]) == left_pot_sum
         )
         self.primal_prog.AddLinearConstraint(
-            sum([e.z for e in self.edges.values() if e.right.name in right_vs])
-            == right_pot_sum
+            sum([e.z for e in self.edges.values() if e.right.name in right_vs]) == right_pot_sum
         )
 
         # total sum is given; don't need it if i already sum up left/right individually
@@ -254,9 +228,7 @@ class TSPasGCS:
         # self.primal_prog.AddLinearConstraint( sum( [e.y for e in self.edges.values()]) == (self.n-2)*(self.n-1)/2 )
 
         # add cost
-        self.primal_prog.AddLinearCost(
-            sum([e.phi * e.cost for e in self.edges.values()])
-        )
+        self.primal_prog.AddLinearCost(sum([e.phi * e.cost for e in self.edges.values()]))
 
     def solve_primal(self, convex_relaxation=True, verbose=False):
         # build the program
@@ -272,16 +244,12 @@ class TSPasGCS:
             YAY("Optimal primal cost is %.5f" % self.primal_solution.get_optimal_cost())
         else:
             ERROR("PRIMAL SOLVE FAILED!")
-            ERROR(
-                "Optimal primal cost is %.5f" % self.primal_solution.get_optimal_cost()
-            )
+            ERROR("Optimal primal cost is %.5f" % self.primal_solution.get_optimal_cost())
             # ERROR(self.primal_solution.get_solver_details())
             return
 
         flows = [self.primal_solution.GetSolution(e.phi) for e in self.edges.values()]
-        not_tight = np.any(
-            np.logical_and(0.01 < np.array(flows), np.array(flows) < 0.99)
-        )
+        not_tight = np.any(np.logical_and(0.01 < np.array(flows), np.array(flows) < 0.99))
         if not_tight:
             WARN("CONVEX RELAXATION NOT TIGHT")
         else:
@@ -291,29 +259,18 @@ class TSPasGCS:
             self.verbose_solution()
 
     def verbose_solution(self):
-        flow_vars = [
-            (e.name, self.primal_solution.GetSolution(e.phi))
-            for e in self.edges.values()
-        ]
+        flow_vars = [(e.name, self.primal_solution.GetSolution(e.phi)) for e in self.edges.values()]
         for (name, flow) in flow_vars:
             if flow > 0.01:
                 print(name, flow)
 
         pots = []
         for v in self.vertices.values():
-            sum_of_y = [
-                self.primal_solution.GetSolution(self.edges[e].y) for e in v.edges_out
-            ]
-            sum_of_z = [
-                self.primal_solution.GetSolution(self.edges[e].z) for e in v.edges_in
-            ]
+            sum_of_y = [self.primal_solution.GetSolution(self.edges[e].y) for e in v.edges_out]
+            sum_of_z = [self.primal_solution.GetSolution(self.edges[e].z) for e in v.edges_in]
             print(v.name, sum_of_y, sum_of_z)
-            sum_of_y = sum(
-                [self.primal_solution.GetSolution(self.edges[e].y) for e in v.edges_out]
-            )
-            sum_of_z = sum(
-                [self.primal_solution.GetSolution(self.edges[e].z) for e in v.edges_in]
-            )
+            sum_of_y = sum([self.primal_solution.GetSolution(self.edges[e].y) for e in v.edges_out])
+            sum_of_z = sum([self.primal_solution.GetSolution(self.edges[e].z) for e in v.edges_in])
             pots.append((v.name, sum_of_z))
 
         # pots = [name for (name, _) in sorted(pots, key = lambda x: x[1])]

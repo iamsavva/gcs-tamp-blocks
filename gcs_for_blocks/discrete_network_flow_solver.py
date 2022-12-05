@@ -39,9 +39,7 @@ class Vertex:
 
 
 class Edge:
-    def __init__(
-        self, left_vertex: Vertex, right_vertex: Vertex, name: str, cost: float = None
-    ):
+    def __init__(self, left_vertex: Vertex, right_vertex: Vertex, name: str, cost: float = None):
         self.left = left_vertex
         self.right = right_vertex
         self.name = name
@@ -175,9 +173,7 @@ class DiscreteNetworkFlowGraph:
         for value, r, s in r_pots:
             print(value, r, s)
 
-    def build_primal_optimization_program(
-        self, convex_relaxation=True, add_potentials=True
-    ):
+    def build_primal_optimization_program(self, convex_relaxation=True, add_potentials=True):
         start = "s0"
         target = "t0"
         # is this inefficient or not?
@@ -245,9 +241,7 @@ class DiscreteNetworkFlowGraph:
         #         print(name, flow)
 
         # get potentials
-        potentials = [
-            (v.name, self.result.GetSolution(v.var)) for v in self.vertices.values()
-        ]
+        potentials = [(v.name, self.result.GetSolution(v.var)) for v in self.vertices.values()]
         # sort by potential
         potentials.sort(key=lambda y: y[1])
         for value, potential in potentials:
@@ -255,9 +249,7 @@ class DiscreteNetworkFlowGraph:
 
     def draw(self):
         # get potentials
-        potentials = [
-            (v.name, self.result.GetSolution(v.var)) for v in self.vertices.values()
-        ]
+        potentials = [(v.name, self.result.GetSolution(v.var)) for v in self.vertices.values()]
 
         # # get flow results
         # flows = [(e.name, self.result.GetSolution(e.var)) for e in self.edges.values()]

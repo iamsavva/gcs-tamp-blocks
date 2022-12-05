@@ -29,12 +29,8 @@ class MotionPlanning:
         self.convex_relaxation = convex_relaxation
         self.num_blocks = len(start_block_pos)  # type: int
         self.moving_block_index = moving_block_index  # type: int
-        self.start_block_pos = [
-            np.array(x) for x in start_block_pos
-        ]  # type: T.List[npt.NDArray]
-        self.target_block_pos = [
-            np.array(x) for x in target_block_pos
-        ]  # type: T.List[npt.NDArray]
+        self.start_block_pos = [np.array(x) for x in start_block_pos]  # type: T.List[npt.NDArray]
+        self.target_block_pos = [np.array(x) for x in target_block_pos]  # type: T.List[npt.NDArray]
 
         smbi = str(self.moving_block_index)  # type: str
         self.start_tsp = "s" + smbi + "_tsp"  # type: str
@@ -64,22 +60,16 @@ class MotionPlanning:
         self.add_mp_constraints_to_prog()
         self.add_mp_costs_to_prog()
 
-    def add_vertex(self, name: str, value = None):
+    def add_vertex(self, name: str, value=None):
         assert name not in self.vertices, "Vertex with name " + name + " already exists"
-        assert name not in self.all_vertices, (
-            "Vertex with name " + name + " already exists in og"
-        )
-        self.all_vertices[name] = Vertex(name, value, block_index = self.moving_block_index)
+        assert name not in self.all_vertices, "Vertex with name " + name + " already exists in og"
+        self.all_vertices[name] = Vertex(name, value, block_index=self.moving_block_index)
         self.vertices[name] = self.all_vertices[name]
 
     def add_edge(self, left_name: str, right_name: str):
         edge_name = left_name + "_" + right_name
-        assert edge_name not in self.edges, (
-            "Edge " + edge_name + " already exists in new edges"
-        )
-        assert edge_name not in self.all_edges, (
-            "Edge " + edge_name + " already exists in og edges"
-        )
+        assert edge_name not in self.edges, "Edge " + edge_name + " already exists in new edges"
+        assert edge_name not in self.all_edges, "Edge " + edge_name + " already exists in og edges"
         self.all_edges[edge_name] = Edge(
             self.all_vertices[left_name], self.all_vertices[right_name], edge_name
         )
@@ -124,12 +114,8 @@ class MotionPlanning:
 
             # if the edge is not from start
             if e.left.name != self.start_tsp:
-                e.set_left_pos(
-                    self.prog.NewContinuousVariables(2, "left_pos_" + e.name)
-                )
-                e.set_right_pos(
-                    self.prog.NewContinuousVariables(2, "right_pos_" + e.name)
-                )
+                e.set_left_pos(self.prog.NewContinuousVariables(2, "left_pos_" + e.name))
+                e.set_right_pos(self.prog.NewContinuousVariables(2, "right_pos_" + e.name))
 
     def add_mp_constraints_to_prog(self):
         ###################################
@@ -185,12 +171,8 @@ class MotionPlanning:
                 # left is in the set that corresponds to left
                 self.prog.AddLinearConstraint(le(lA @ np.append(e.left_pos, e.phi), lb))
                 # right is in the set that corresponds to left and right
-                self.prog.AddLinearConstraint(
-                    le(lA @ np.append(e.right_pos, e.phi), lb)
-                )
-                self.prog.AddLinearConstraint(
-                    le(rA @ np.append(e.right_pos, e.phi), rb)
-                )
+                self.prog.AddLinearConstraint(le(lA @ np.append(e.right_pos, e.phi), lb))
+                self.prog.AddLinearConstraint(le(rA @ np.append(e.right_pos, e.phi), rb))
             if e.right.name == self.target_tsp:
                 # TODO: this should be redundant
                 left_aligned_set = self.convex_sets[e.left.name]

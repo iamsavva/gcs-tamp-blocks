@@ -91,7 +91,7 @@ def find_path_to_target(edges, start):
 flow_vars = [(e, primal_solution.GetSolution(e.phi)) for e in edges.values()]
 non_zero_edges = [e for (e, flow) in flow_vars if flow > 0.01]
 v_path, e_path = find_path_to_target(non_zero_edges, vertices[start_tsp])
-loc_path = [primal_solution.GetSolution(e.z) for e in e_path]
-loc_path[0] = primal_solution.GetSolution(e_path[1].y)
+loc_path = [primal_solution.GetSolution(e.right_pos) for e in e_path]
+loc_path[0] = primal_solution.GetSolution(e_path[1].left_pos)
 
 plot_list_of_aligned_sets(convex_sets, bounding_box, visitations, moving_block_index, loc_path)

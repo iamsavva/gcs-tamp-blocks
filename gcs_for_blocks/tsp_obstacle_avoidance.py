@@ -8,63 +8,6 @@ from pydrake.solvers import MathematicalProgram, Solve
 from pydrake.math import le, eq
 from .axis_aligned_set_tesselation_2d import Box
 
-# import graphviz
-
-
-class Vertex:
-    def __init__(self, name: str, value: npt.NDArray = np.array([])):
-        self.value = value  # effectively just the name
-        self.name = name  # name of the vertex
-        self.edges_in = []  # str names of edges in
-        self.edges_out = []  # str names of edges out
-
-        self.v = None
-        self.order = None
-
-    def add_edge_in(self, nbh: str):
-        assert nbh not in self.edges_in
-        self.edges_in.append(nbh)
-
-    def add_edge_out(self, nbh: str):
-        assert nbh not in self.edges_out
-        self.edges_out.append(nbh)
-
-    def set_v(self, v):
-        assert self.v is None, "V for " + self.name + " is already set"
-        self.v = v
-
-    def set_order(self, order):
-        assert self.order is None, "Order for " + self.name + " is already set"
-        self.order = order
-
-
-class Edge:
-    def __init__(self, left_vertex: Vertex, right_vertex: Vertex, name: str, cost: float = None):
-        self.left = left_vertex
-        self.right = right_vertex
-        self.name = name
-        self.cost = cost
-
-        # primal variables
-        self.phi = 0
-        self.left_pos = 0
-        self.right_pos = 0
-
-    def set_cost(self, cost: float):
-        assert self.cost is None, "Cost for " + self.name + " is already set"
-        self.cost = cost
-
-    def set_phi(self, flow):
-        assert self.phi == 0, "Flow for " + self.name + " is already set"
-        self.phi = flow
-
-    def set_left_pos(self, left_pos):
-        assert self.left_pos == 0, "left_pos for " + self.name + " is already set"
-        self.left_pos = left_pos
-
-    def set_right_pos(self, right_pos):
-        assert self.right_pos == 0, "right_pos for " + self.name + " is already set"
-        self.right_pos = right_pos
 
 
 class TSPasGCS:

@@ -4,17 +4,13 @@ import numpy as np
 import numpy.typing as npt
 
 from .util import timeit, INFO, WARN, ERROR, YAY
-from pydrake.solvers import MathematicalProgram, Solve, L2NormCost, Binding
+from pydrake.solvers import MathematicalProgram
 from pydrake.math import le, eq
 
 from .axis_aligned_set_tesselation_2d import (
     AlignedSet,
-    axis_aligned_tesselation,
-    locations_to_aligned_sets,
-    Box,
 )
-from .tsp_solver import Vertex, Edge, TSPasGCS
-
+from .tsp_solver import Vertex, Edge
 
 class MotionPlanning:
     def __init__(
@@ -115,17 +111,16 @@ class MotionPlanning:
 
             # if the edge is not from start
             if e.left.name != self.start_tsp:
-                # y is left_pos, z is right_pos
-                e.set_y(self.prog.NewContinuousVariables(2, "y_" + e.name))
-                e.set_z(self.prog.NewContinuousVariables(2, "z_" + e.name))
+                e.set_left_pos(self.prog.NewContinuousVariables(2, "left_pos_" + e.name))
+                e.set_right_pos(self.prog.NewContinuousVariables(2, "right_pos_" + e.name))
 
     def add_mp_constraints_to_prog(self):
         ###################################
         # PER VERTEX
         for v in self.vertices.values():
             # sum_of_y = sum_of_z constraints
-            sum_of_y = sum([self.edges[e].y for e in v.edges_out])
-            sum_of_z = sum([self.edges[e].z for e in v.edges_in])
+            sum_of_y = sum([self.edges[e].left_pos for e in v.edges_out])
+            sum_of_z = sum([self.edges[e].right_pos for e in v.edges_in])
             # it's a start node
             if v.name == self.start_tsp:
                 continue
@@ -167,16 +162,16 @@ class MotionPlanning:
                 right_aligned_set = self.convex_sets[e.right.name]
                 rA, rb = right_aligned_set.get_perspective_hpolyhedron()
                 # left is in the set that corresponds to left
-                self.prog.AddLinearConstraint(le(lA @ np.append(e.y, e.phi), lb))
+                self.prog.AddLinearConstraint(le(lA @ np.append(e.left_pos, e.phi), lb))
                 # right is in the set that corresponds to left and right
-                self.prog.AddLinearConstraint(le(lA @ np.append(e.z, e.phi), lb))
-                self.prog.AddLinearConstraint(le(rA @ np.append(e.z, e.phi), rb))
+                self.prog.AddLinearConstraint(le(lA @ np.append(e.right_pos, e.phi), lb))
+                self.prog.AddLinearConstraint(le(rA @ np.append(e.right_pos, e.phi), rb))
             if e.right.name == self.target_tsp:
                 # TODO: this should be redundant
                 left_aligned_set = self.convex_sets[e.left.name]
                 lA, lb = left_aligned_set.get_perspective_hpolyhedron()
                 # left is in the set that corresponds to left
-                self.prog.AddLinearConstraint(le(lA @ np.append(e.y, e.phi), lb))
+                self.prog.AddLinearConstraint(le(lA @ np.append(e.left_pos, e.phi), lb))
 
             # turning obstacles on and off
             # edge goes into a start obstacle
@@ -200,5 +195,5 @@ class MotionPlanning:
                 A = np.array([[1, 0, -1, 0], [0, 1, 0, -1]])
                 b = np.array([0, 0])
                 # TODO: it is annoying that there are a bunch of ~random non-zero edges that have self-cycles
-                self.prog.AddL2NormCostUsingConicConstraint(A, b, np.append(e.y, e.z))
+                self.prog.AddL2NormCostUsingConicConstraint(A, b, np.append(e.left_pos, e.right_pos))
                 

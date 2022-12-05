@@ -2,10 +2,9 @@ from gcs_for_blocks.tsp_solver import build_block_moving_gcs_tsp, TSPasGCS
 import numpy as np
 
 
-# a = [1,None]
-# print( sum([x for x in a]) )
-
-# raise Exception
+a = np.array([1,2])
+b = 3
+print(np.append(a,b))
 
 bd = 1
 nb = 9

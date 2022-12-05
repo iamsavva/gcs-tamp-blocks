@@ -179,13 +179,22 @@ def axis_aligned_tesselation(bounding_box: AlignedSet, obstacles: T.List[Aligned
 
     all_sets = list(all_sets)
 
+    # index the boxes
+    all_sets_dict = dict()
+    index = 0
+    for s in all_sets:
+        if not s.set_is_obstacle:
+            s.name = "r" + str(index)
+            index += 1
+        all_sets_dict[s.name] = s
+
     # assert that no sets intersect
     for i in range(len(all_sets)):
         for j in range(i + 1, len(all_sets)):
             assert not all_sets[i].intersects_with(all_sets[j]), (
                 "\n" + all_sets[i].__repr__() + "\n" + all_sets[j].__repr__()
             )
-    return all_sets
+    return all_sets_dict
 
 
 def locations_to_aligned_sets(start, target, block_width):
@@ -198,13 +207,25 @@ def locations_to_aligned_sets(start, target, block_width):
     return sets
 
 
-def plot_list_of_aligned_sets(sets, bounding_box):
-    fig, ax = plt.subplots()
+def plot_list_of_aligned_sets(sets, bounding_box, visitations = None):
+
+    colors = cm.rainbow(np.linspace(0, 1, 30))
+    _, ax = plt.subplots()
     index = 0
     print(len(sets))
-    for a_set in sets:
+    for a_set in sets.values():
         index += 1
-        ax.add_patch(a_set.get_rectangle(colors[index]))
+        if visitations is None:
+            color = colors[index] 
+        else:
+            if a_set.name[0] == "s" and visitations[int(a_set.name[1:])] == 0:
+                color = 'grey'
+            elif a_set.name[0] == "t" and visitations[int(a_set.name[1:])] == 1:
+                color = "grey"
+            else:
+                color = "white"
+
+        ax.add_patch(a_set.get_rectangle(color))
         if a_set.set_is_obstacle:
             ax.annotate(
                 a_set.name,
@@ -222,25 +243,17 @@ def plot_list_of_aligned_sets(sets, bounding_box):
 
 
 
+if __name__ == "__main__":
+    bounding_box = AlignedSet(b=0, a=12, l=0, r=12)
+    block_width = 1
+    start = [(1, 1), (3, 5), (7, 4)]
+    target = [(5, 11), (9, 7), (5, 8)]
+    # start = [(1,1)]
+    # target = [(5,11)]
 
-# colors = cm.rainbow(np.linspace(0, 1, 30))
+    obstacles = locations_to_aligned_sets(start, target, block_width)
+    sets = axis_aligned_tesselation(bounding_box, obstacles)
 
-# bounding_box = AlignedSet(b=0, a=12, l=0, r=12)
-# block_width = 1
-# start = [(1, 1), (3, 5), (7, 4)]
-# target = [(5, 11), (9, 7), (5, 8)]
-# # start = [(1,1)]
-# # target = [(5,11)]
-
-# obstacles = locations_to_aligned_sets(start, target, block_width)
-# sets = axis_aligned_tesselation(bounding_box, obstacles)
-
-
-# # index the boxes
-# index = 0
-# for s in sets:
-#     if not s.set_is_obstacle:
-#         s.name = "r" + str(index)
-#         index += 1
-
-# plot_list_of_aligned_sets(sets, bounding_box)
+    # fix
+    colors = cm.rainbow(np.linspace(0, 1, 30))
+    plot_list_of_aligned_sets(sets, bounding_box)

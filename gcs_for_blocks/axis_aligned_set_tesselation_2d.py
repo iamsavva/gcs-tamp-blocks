@@ -207,7 +207,7 @@ def locations_to_aligned_sets(start, target, block_width):
     return sets
 
 
-def plot_list_of_aligned_sets(sets, bounding_box, visitations = None):
+def plot_list_of_aligned_sets(sets, bounding_box, visitations = None, moving_block_index = None, loc_path = None):
     colors = cm.rainbow(np.linspace(0, 1, 30))
     _, ax = plt.subplots()
     index = 0
@@ -222,6 +222,9 @@ def plot_list_of_aligned_sets(sets, bounding_box, visitations = None):
                 color = "grey"
             else:
                 color = "white"
+            if a_set.name[0] in ("s","t") and int(a_set.name[1:]) == moving_block_index:
+                color = "limegreen"
+
 
         ax.add_patch(a_set.get_rectangle(color))
         if a_set.set_is_obstacle:
@@ -234,6 +237,8 @@ def plot_list_of_aligned_sets(sets, bounding_box, visitations = None):
                 ha="center",
                 va="center",
             )
+    if loc_path is not None:
+        ax.plot([x[0] for x in loc_path], [x[1] for x in loc_path], color = "mediumblue", linewidth=3)
 
     ax.set_xlim([bounding_box.l, bounding_box.r])
     ax.set_ylim([bounding_box.b, bounding_box.a])

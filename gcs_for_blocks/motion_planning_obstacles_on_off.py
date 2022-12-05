@@ -124,21 +124,37 @@ class MotionPlanning(TSPasGCS):
             YAY("CONVEX RELAXATION IS TIGHT")
 
         flow_vars = [(e, self.primal_solution.GetSolution(e.phi)) for e in self.edges.values()]
-        for (e, flow) in flow_vars:
-            if flow > 0.01:
-                print(e.name, flow)
+        # for (e, flow) in flow_vars:
+        #     if flow > 0.01:
+        #         print(e.name, flow)
 
-        non_zero_flows = [e for (e, flow) in flow_vars if flow > 0.01]
-        e0 = self.edges["s0_tsp_s0"]
+        non_zero_edges = [e for (e, flow) in flow_vars if flow > 0.01]
+        v_path, e_path = self.find_path_to_target(non_zero_edges, self.vertices[self.start])
+        loc_path = [self.primal_solution.GetSolution(e.z) for e in e_path]
+        loc_path[0] = self.primal_solution.GetSolution(e_path[1].y)
+        # name_loc = [(v.name, self.primal_solution.GetSolution(x) ) for (v,x) in zip(v_path, loc_path)]
+        # print(loc_path)
+        return loc_path
 
+        # for e in self.edges.values():
+        #     if self.primal_solution.GetSolution(e.phi) > 0.01:
+        #         if e.name != self.start and not np.allclose(self.primal_solution.GetSolution(e.y), self.primal_solution.GetSolution(e.z)):
+        #             print(e.name, self.primal_solution.GetSolution(e.y), self.primal_solution.GetSolution(e.z))
 
-        
+    def find_path_to_target( self, edges, start ):
+        """Given a set of active edges, find a path from start to target"""
+        edges_out = [e for e in edges if e.left == start]
+        assert len(edges_out) == 1
+        current_edge = edges_out[0]
+        v = current_edge.right
 
-        for e in self.edges.values():
-            if self.primal_solution.GetSolution(e.phi) > 0.01:
-                if e.name != "s0_tsp_s0" and not np.allclose(self.primal_solution.GetSolution(e.y), self.primal_solution.GetSolution(e.z)):
-                    print(e.name, self.primal_solution.GetSolution(e.y), self.primal_solution.GetSolution(e.z))
+        target_reached = (v.name == self.target)
 
+        if target_reached:
+            return [start] + [v], [current_edge]
+        else:
+            v, e = self.find_path_to_target(edges, v)
+            return [start] + v, [current_edge] + e
         
 
         
@@ -267,7 +283,7 @@ class MotionPlanning(TSPasGCS):
                 A = np.array([[1,0,-1,0],[0,1,0,-1]])
                 b = np.array([0,0])
                 self.prog.AddL2NormCostUsingConicConstraint(A, b, np.append(e.y, e.z))
-                self.prog.AddLinearCost(0.1*e.phi)
+                # self.prog.AddLinearCost(0.1*e.phi)
             
 
             

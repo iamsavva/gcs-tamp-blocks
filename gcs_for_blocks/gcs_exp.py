@@ -94,7 +94,9 @@ class GCSforBlocksExp(GCSforBlocks):
             i = str(j)
             i_1 = str(j + 1)
             # add transition constraint F_ to FM_
-            self.add_edge("F_" + i, "FM_" + i, 0, EdgeOptExp.move_edge(), "Move free at " + i)
+            self.add_edge(
+                "F_" + i, "FM_" + i, 0, EdgeOptExp.move_edge(), "Move free at " + i
+            )
 
             # add weird equality constraint FM_ to G_, per block
             for block in range(1, self.opt.num_blocks + 1):
@@ -107,7 +109,9 @@ class GCSforBlocksExp(GCSforBlocks):
                 )
 
             # add move constraint from G_ to GM_
-            self.add_edge("G_" + i, "GM_" + i, 1, EdgeOptExp.move_edge(), "Move block at " + i)
+            self.add_edge(
+                "G_" + i, "GM_" + i, 1, EdgeOptExp.move_edge(), "Move block at " + i
+            )
 
             # add weird equality constraint from GM to F, per block
             for block in range(1, self.opt.num_blocks + 1):
@@ -198,7 +202,9 @@ class GCSforBlocksExp(GCSforBlocks):
         # same arm left = arm right
         constraints = np.append(constraints, eq(x[0:b], y[0:b]))
         for j in range(1, i):
-            constraints = np.append(constraints, eq(x[j * b : (j + 1) * b], y[j * b : (j + 1) * b]))
+            constraints = np.append(
+                constraints, eq(x[j * b : (j + 1) * b], y[j * b : (j + 1) * b])
+            )
         for j in range(i, self.opt.num_blocks):
             constraints = np.append(
                 constraints, eq(x[(j + 1) * b : (j + 2) * b], y[j * b : (j + 1) * b])
@@ -222,7 +228,9 @@ class GCSforBlocksExp(GCSforBlocks):
         # same arm left = arm right
         constraints = np.append(constraints, eq(x[0:b], y[0:b]))
         for j in range(1, i):
-            constraints = np.append(constraints, eq(x[j * b : (j + 1) * b], y[j * b : (j + 1) * b]))
+            constraints = np.append(
+                constraints, eq(x[j * b : (j + 1) * b], y[j * b : (j + 1) * b])
+            )
         for j in range(i, self.opt.num_blocks):
             constraints = np.append(
                 constraints, eq(x[(j + 1) * b : (j + 2) * b], y[j * b : (j + 1) * b])
@@ -279,7 +287,9 @@ class GCSforBlocksExp(GCSforBlocks):
         # find edges with non-zero flow
         flow_variables = [e.phi() for e in self.gcs.Edges()]
         flow_results = [self.solution.GetSolution(p) for p in flow_variables]
-        active_edges = [edge for edge, flow in zip(self.gcs.Edges(), flow_results) if flow >= 0.99]
+        active_edges = [
+            edge for edge, flow in zip(self.gcs.Edges(), flow_results) if flow >= 0.99
+        ]
         # using these edges, find the path from start to target
         path = self.find_path_to_target(active_edges, self.name_to_vertex["start"])
         modes = [v.name() for v in path]

@@ -6,281 +6,266 @@ import numpy.typing as npt
 from .util import timeit, INFO, WARN, ERROR, YAY
 from pydrake.solvers import MathematicalProgram, Solve
 from pydrake.math import le, eq
-from .axis_aligned_set_tesselation_2d import Box
+from .axis_aligned_set_tesselation_2d import (
+    Box,
+    axis_aligned_tesselation,
+    locations_to_aligned_sets,
+)
+from .tsp_solver import Vertex, Edge
+from .motion_planning_obstacles_on_off import MotionPlanning
 
 
-
-class TSPasGCS:
-    def __init__(self):
+class BlockMovingObstacleAvoidance:
+    def __init__(
+        self,
+        start_pos,
+        target_pos,
+        bounding_box,
+        block_width=1.0,
+        convex_relaxation=False,
+    ):
+        self.num_blocks = len(start_pos) - 1
+        assert len(target_pos) == len(start_pos)
         self.edges = dict()  # type: T.Dict[str, Edge]
         self.vertices = dict()  # type: T.Dict[str, Vertex]
-        self.start = None  # str
-        self.target = None  # str
-        self.primal_prog = None  # MathematicalProgram
-        self.primal_solution = None
+        self.start_arm_pos = np.array(start_pos[0])
+        self.target_arm_pos = np.array(target_pos[0])
+        self.start_block_pos = [np.array(x) for x in start_pos[1:]]
+        self.target_block_pos = [np.array(x) for x in target_pos[1:]]
+        self.start = "sa_tsp"  # str
+        self.target = "ta_tsp"  # str
+        self.bounding_box = bounding_box
+        # get obstacles
+        obstacles = locations_to_aligned_sets(
+            self.start_block_pos, self.target_block_pos, block_width
+        )
+        # make a tesselation
+        self.convex_sets = axis_aligned_tesselation(bounding_box.copy(), obstacles)
+        self.convex_relaxation = convex_relaxation
+        self.prog = MathematicalProgram()
+        self.solution = None
+        self.build()
 
     @property
     def n(self):  # number of vertices
-        return len(self.vertices)
+        return 2 * (self.num_blocks + 1)
 
-    def add_vertex(self, name: str, value: npt.NDArray = np.array([])):
+    def s(self, name="a"):
+        return "s" + str(name) + "_tsp"
+
+    def t(self, name="a"):
+        return "t" + str(name) + "_tsp"
+
+    def add_vertex(self, name: str, value: npt.NDArray, block_index: int):
         assert name not in self.vertices, "Vertex with name " + name + " already exists"
-        self.vertices[name] = Vertex(name, value)
+        self.vertices[name] = Vertex(name, value, block_index)
 
-    def add_edge(self, left_name: str, right_name: str, edge_name: str = None, cost: float = None):
-        if edge_name is None:
-            edge_name = left_name + "_" + right_name
+    def add_edge(self, left_name: str, right_name: str):
+        edge_name = left_name + "_" + right_name
         assert edge_name not in self.edges, "Edge " + edge_name + " already exists"
         self.edges[edge_name] = Edge(
-            self.vertices[left_name], self.vertices[right_name], edge_name, cost
+            self.vertices[left_name], self.vertices[right_name], edge_name
         )
         self.vertices[left_name].add_edge_out(edge_name)
         self.vertices[right_name].add_edge_in(edge_name)
 
-    def add_cost_on_edge(self, edge_name: str, cost: float):
-        self.edges[edge_name].set_cost(cost)
+    def build(self):
+        self.add_tsp_vertices_and_edges()
+        self.add_tsp_variables_to_prog()
+        self.add_tsp_constraints_to_prog()
+        self.add_tsp_costs_to_prog()
+        self.add_motion_planning()
 
-    def build_dual_optimization_program(self):
-        raise Exception("Not Implemented")
+    def add_tsp_vertices_and_edges(self):
+        ################################
+        # add all vertices
+        ################################
+        # add start/target arm vertices
+        self.add_vertex(self.start, self.start_arm_pos, -1)
+        self.add_vertex(self.target, self.target_arm_pos, -1)
+        # add start/target block vertices
+        for i, pos in enumerate(self.start_block_pos):
+            self.add_vertex(self.s(i), pos, i)
+        for i, pos in enumerate(self.target_block_pos):
+            self.add_vertex(self.t(i), pos, i)
 
-    def set_start_target(self, start_name: str, target_name: str):
-        self.start = start_name
-        self.target = target_name
+        ################################
+        # add all edges
+        ################################
+        # add edge to from initial arm location to final arm location
+        self.add_edge(self.s("a"), self.t("a"))
+        for j in range(self.num_blocks):
+            # from start to any
+            self.add_edge(self.s("a"), self.s(j))
+            # from any to target
+            self.add_edge(self.t(j), self.t("a"))
+            # from any to target to any start
+            for i in range(self.num_blocks):
+                if i != j:
+                    self.add_edge(self.t(j), self.s(i))
+            # from start to target is motion planning!
 
-    def build_primal_optimization_program(self, convex_relaxation=True):
-        assert self.start is not None
-        assert self.target is not None
-        assert self.start in self.vertices
-        assert self.target in self.vertices
+    def add_tsp_variables_to_prog(self):
+        # each vertex has a visit variable
+        # vertex visit serves as in for target, out for start
+        for v in self.vertices.values():
+            # visitation variable
+            v.set_v(self.prog.NewContinuousVariables(self.num_blocks, "v_" + v.name))
+            v.set_order(self.prog.NewContinuousVariables(1, "order_" + v.name)[0])
 
-        self.primal_prog = MathematicalProgram()
-
-        # for each edge, add decision variables: phi, y, z
         for e in self.edges.values():
-            e.set_y(self.primal_prog.NewContinuousVariables(1, "y_" + e.name)[0])
-            e.set_z(self.primal_prog.NewContinuousVariables(1, "z_" + e.name)[0])
-            if convex_relaxation:
-                e.set_phi(self.primal_prog.NewContinuousVariables(1, "phi_" + e.name)[0])
-            else:
-                e.set_phi(self.primal_prog.NewBinaryVariables(1, "phi_" + e.name)[0])
+            # left and right visitation
+            e.set_left_v(
+                self.prog.NewContinuousVariables(self.num_blocks, "left_v_" + e.name)
+            )
+            e.set_right_v(
+                self.prog.NewContinuousVariables(self.num_blocks, "right_v_" + e.name)
+            )
 
+            # add flow variable
+            if self.convex_relaxation:
+                e.set_phi(self.prog.NewContinuousVariables(1, "phi_" + e.name)[0])
+                self.prog.AddLinearConstraint(e.phi, 0.0, 1.0)
+            else:
+                e.set_phi(self.prog.NewBinaryVariables(1, "phi_" + e.name)[0])
+
+            # left and right order
+            e.set_left_order(
+                self.prog.NewContinuousVariables(1, "left_order_" + e.name)[0]
+            )
+            e.set_right_order(
+                self.prog.NewContinuousVariables(1, "right_order" + e.name)[0]
+            )
+
+    def add_tsp_constraints_to_prog(self):
         # for each edge, add constraints
+        order_box = Box(lb=np.array([0]), ub=np.array([self.n - 1]), state_dim=1)
+        visitation_box = Box(
+            lb=np.zeros(self.num_blocks),
+            ub=np.ones(self.num_blocks),
+            state_dim=self.num_blocks,
+        )
         for e in self.edges.values():
-            # some tricks related to set inclusion
-            order_box = Box(lb=np.array([1]), ub=np.array([self.n - 1]), state_dim=1)
-            A1, b1 = order_box.get_perspective_hpolyhedron()
+            # perspective constraints on order
+            A, b = order_box.get_perspective_hpolyhedron()
+            self.prog.AddLinearConstraint(le(A @ np.array([e.left_order, e.phi]), b))
+            self.prog.AddLinearConstraint(le(A @ np.array([e.right_order, e.phi]), b))
+            # perspective constraints on visits
+            A, b = visitation_box.get_hpolyhedron()
+            self.prog.AddLinearConstraint(le(A @ e.left_v, b))
+            self.prog.AddLinearConstraint(le(A @ e.right_v, b))
+            # increasing order
+            self.prog.AddLinearConstraint(e.left_order + e.phi == e.right_order)
+            # over all tsp edges, visit is same
+            self.prog.AddLinearConstraint(eq(e.left_v, e.right_v))
 
-            order_box = Box(lb=np.array([2]), ub=np.array([self.n - 1]), state_dim=1)
-            A2, b2 = order_box.get_perspective_hpolyhedron()
-
-            if e.left.name == self.start:
-                order_box_origin = Box(lb=np.array([0]), ub=np.array([0]), state_dim=1)
-                oA, ob = order_box_origin.get_perspective_hpolyhedron()
-                self.primal_prog.AddLinearConstraint(le(oA @ np.array([e.y, e.phi]), ob))
-            elif e.left.name[0] == "s":
-                self.primal_prog.AddLinearConstraint(le(A1 @ np.array([e.y, e.phi]), b1))
-            else:
-                self.primal_prog.AddLinearConstraint(le(A2 @ np.array([e.y, e.phi]), b2))
-
-            if e.right.name == self.target:
-                target_box = Box(lb=np.array([self.n - 2]), ub=np.array([self.n - 2]), state_dim=1)
-                tA, tb = target_box.get_perspective_hpolyhedron()
-                self.primal_prog.AddLinearConstraint(le(tA @ np.array([e.y, e.phi]), tb))
-                self.primal_prog.AddLinearConstraint(le(A2 @ np.array([e.z, e.phi]), b2))
-            elif e.right.name[0] == "s":
-                self.primal_prog.AddLinearConstraint(le(A1 @ np.array([e.z, e.phi]), b1))
-            else:
-                self.primal_prog.AddLinearConstraint(le(A2 @ np.array([e.z, e.phi]), b2))
-
-            # order increase constraint
-            self.primal_prog.AddLinearConstraint(e.y + e.phi == e.z)
-            self.primal_prog.AddLinearConstraint(e.phi, 0.0, 1.0)
-
-        # for each vertex, add constraints
         for v in self.vertices.values():
-            if v.name != self.start:
-                # add "flow in is 1" constraint
-                flow_in = sum([self.edges[e].phi for e in v.edges_in])
-                self.primal_prog.AddLinearConstraint(flow_in == 1)
-            if v.name != self.target:
-                # add flow out is 1 constraint
-                flow_out = sum([self.edges[e].phi for e in v.edges_out])
-                self.primal_prog.AddLinearConstraint(flow_out == 1)
-
-            # sum of ys = sum of zs
-            sum_of_y = sum([self.edges[e].y for e in v.edges_out])
-            sum_of_z = sum([self.edges[e].z for e in v.edges_in])
-
+            flow_in = sum([self.edges[e].phi for e in v.edges_in])
+            flow_out = sum([self.edges[e].phi for e in v.edges_out])
+            order_in = sum([self.edges[e].right_order for e in v.edges_in])
+            order_out = sum([self.edges[e].left_order for e in v.edges_out])
+            v_in = sum([self.edges[e].right_v for e in v.edges_in])
+            v_out = sum([self.edges[e].left_v for e in v.edges_out])
             if v.name == self.start:
-                self.primal_prog.AddLinearConstraint(sum_of_y == 0.0)
+                # it's the start vertex; initial conditions
+                # flow out is 1
+                self.prog.AddLinearConstraint(flow_out == 1)
+                # order at vertex is 0
+                self.prog.AddLinearConstraint(v.order == 0)
+                # order continuity: order_out is 0
+                self.prog.AddLinearConstraint(v.order == order_out)
+                # 0 visits have been made yet
+                self.prog.AddLinearConstraint(eq(v.v, np.zeros(self.num_blocks)))
+                # visit continuity
+                self.prog.AddLinearConstraint(eq(v.v, v_out))
             elif v.name == self.target:
-                self.primal_prog.AddLinearConstraint(sum_of_z == self.n - 1)
-            else:
-                self.primal_prog.AddLinearConstraint(sum_of_y == sum_of_z)
-
-        # sum of left is sum of even, some of right is sum of odd
-        left_vs = set()
-        right_vs = set()
-        for v in self.vertices.values():
-            if v.name == "s0":
-                left_vs.add(v.name)
-            elif v.name == "t0":
-                right_vs.add(v.name)
+                # it's the target vertex; final conditions
+                # flow in is 1
+                self.prog.AddLinearConstraint(flow_in == 1)
+                # order at vertex is n-1
+                self.prog.AddLinearConstraint(v.order == self.n - 1)
+                # order continuity: order in is n-1
+                self.prog.AddLinearConstraint(v.order == order_in)
+                # all blocks have been visited
+                self.prog.AddLinearConstraint(eq(v.v, np.ones(self.num_blocks)))
+                # visit continuity: v me is v in
+                self.prog.AddLinearConstraint(eq(v.v, v_in))
+            elif v.name[0] == "s":
+                # it's a start block vertex
+                # flow in is 1
+                self.prog.AddLinearConstraint(
+                    flow_in == 1
+                )  # flow out is set in motion planning
+                # vertex order is sum of orders in
+                self.prog.AddLinearConstraint(v.order == order_in)
+                # vertex visit is sum of visits in
+                self.prog.AddLinearConstraint(eq(v.v, v_in))
+                # order belongs to a set (TODO: redundant?)
+                A, b = order_box.get_hpolyhedron()
+                self.prog.AddLinearConstraint(le(A @ np.array([v.order]), b))
+                # visitations belong to a set (TODO: redundant?)
+                A, b = visitation_box.get_hpolyhedron()
+                self.prog.AddLinearConstraint(le(A @ v.v, b))
             elif v.name[0] == "t":
-                left_vs.add(v.name)
-            else:
-                right_vs.add(v.name)
-        left_pot_sum = (self.n / 2) * (self.n / 2 - 1)
-        right_pot_sum = (self.n - 1) * self.n / 2 - left_pot_sum
-        self.primal_prog.AddLinearConstraint(
-            sum([e.z for e in self.edges.values() if e.right.name in left_vs]) == left_pot_sum
-        )
-        self.primal_prog.AddLinearConstraint(
-            sum([e.z for e in self.edges.values() if e.right.name in right_vs]) == right_pot_sum
-        )
+                # it's a target block vertex
+                # flow out is 1
+                self.prog.AddLinearConstraint(
+                    flow_out == 1
+                )  # flow in is set in motion planning
+                # vertex order is sum of orders out
+                self.prog.AddLinearConstraint(v.order == order_out)
+                # vertex visit is sum of visits out
+                self.prog.AddLinearConstraint(eq(v.v, v_out))
+                # order belongs to a set (TODO: redundant?)
+                A, b = order_box.get_hpolyhedron()
+                self.prog.AddLinearConstraint(le(A @ np.array([v.order]), b))
+                # visitations belong to a set (TODO: redundant?)
+                A, b = visitation_box.get_hpolyhedron()
+                self.prog.AddLinearConstraint(le(A @ v.v, b))
 
-        # total sum is given; don't need it if i already sum up left/right individually
-        # self.primal_prog.AddLinearConstraint( sum( [e.z for e in self.edges.values()]) == (self.n-1)*self.n/2 )
-        # self.primal_prog.AddLinearConstraint( sum( [e.y for e in self.edges.values()]) == (self.n-2)*(self.n-1)/2 )
+                # order / visitation continuity over motion planning
+                # order at t_i_tsp = order at v_i_tsp + 1
+                sv = self.vertices["s" + v.name[1:]]
+                assert sv.block_index == v.block_index, "block indeces do not match"
+                self.prog.AddLinearConstraint(sv.order + 1 == v.order)
+                # visitations hold except for the block i at which we are in
+                for i in range(self.num_blocks):
+                    if i == v.block_index:
+                        self.prog.AddLinearConstraint(sv.v[i] + 1 == v.v[i])
+                    else:
+                        self.prog.AddLinearConstraint(sv.v[i] == v.v[i])
 
-        # add cost
-        self.primal_prog.AddLinearCost(sum([e.phi * e.cost for e in self.edges.values()]))
+    def add_tsp_costs_to_prog(self):
+        for e in self.edges.values():
+            e.cost = np.linalg.norm(e.right.value - e.left.value)
+        self.prog.AddLinearCost(sum([e.phi * e.cost for e in self.edges.values()]))
 
-    def solve_primal(self, convex_relaxation=True, verbose=False):
-        # build the program
-        x = timeit()
-        self.build_primal_optimization_program(convex_relaxation)
-        x.dt("Building the program")
+    def add_motion_planning(self):
+        for block_index in range(self.num_blocks):
+            MotionPlanning(
+                self.prog,
+                self.vertices,
+                self.edges,
+                self.bounding_box.copy(),
+                self.start_block_pos,
+                self.target_block_pos,
+                self.convex_sets,
+                block_index,
+                self.convex_relaxation,
+            )
 
-        # solve
-        self.primal_solution = Solve(self.primal_prog)
-        x.dt("Solving the program")
-
-        if self.primal_solution.is_success():
-            YAY("Optimal primal cost is %.5f" % self.primal_solution.get_optimal_cost())
+    def solve(self):
+        self.solution = Solve(self.prog)
+        if self.solution.is_success():
+            YAY("Optimal primal cost is %.5f" % self.solution.get_optimal_cost())
         else:
             ERROR("PRIMAL SOLVE FAILED!")
-            ERROR("Optimal primal cost is %.5f" % self.primal_solution.get_optimal_cost())
-            # ERROR(self.primal_solution.get_solver_details())
-            return
+            ERROR("Optimal primal cost is %.5f" % self.solution.get_optimal_cost())
+            raise Exception
 
-        flows = [self.primal_solution.GetSolution(e.phi) for e in self.edges.values()]
+        flows = [self.solution.GetSolution(e.phi) for e in self.edges.values()]
         not_tight = np.any(np.logical_and(0.01 < np.array(flows), np.array(flows) < 0.99))
         if not_tight:
             WARN("CONVEX RELAXATION NOT TIGHT")
         else:
             YAY("CONVEX RELAXATION IS TIGHT")
-
-        if verbose:
-            self.verbose_solution()
-
-    def verbose_solution(self):
-        flow_vars = [(e.name, self.primal_solution.GetSolution(e.phi)) for e in self.edges.values()]
-        for (name, flow) in flow_vars:
-            if flow > 0.01:
-                print(name, flow)
-
-        pots = []
-        for v in self.vertices.values():
-            sum_of_y = [self.primal_solution.GetSolution(self.edges[e].y) for e in v.edges_out]
-            sum_of_z = [self.primal_solution.GetSolution(self.edges[e].z) for e in v.edges_in]
-            print(v.name, sum_of_y, sum_of_z)
-            sum_of_y = sum([self.primal_solution.GetSolution(self.edges[e].y) for e in v.edges_out])
-            sum_of_z = sum([self.primal_solution.GetSolution(self.edges[e].z) for e in v.edges_in])
-            pots.append((v.name, sum_of_z))
-
-        # pots = [name for (name, _) in sorted(pots, key = lambda x: x[1])]
-        pots = [x for x in sorted(pots, key=lambda x: x[1])]
-        print(pots)
-
-        left_vs = set()
-        right_vs = set()
-        for v in self.vertices.values():
-            if v.name == "s0":
-                left_vs.add(v.name)
-            elif v.name == "t0":
-                right_vs.add(v.name)
-            elif v.name[0] == "t":
-                left_vs.add(v.name)
-            else:
-                right_vs.add(v.name)
-        print(left_vs)
-        print(right_vs)
-        print(
-            sum(
-                [
-                    self.primal_solution.GetSolution(e.z)
-                    for e in self.edges.values()
-                    if e.right.name in left_vs
-                ]
-            )
-        )
-        print(
-            sum(
-                [
-                    self.primal_solution.GetSolution(e.z)
-                    for e in self.edges.values()
-                    if e.right.name in right_vs
-                ]
-            )
-        )
-        left_pot_sum = (self.n / 2) * (self.n / 2 - 1)
-        right_pot_sum = (self.n - 1) * self.n / 2 - left_pot_sum
-        print(left_pot_sum, right_pot_sum)
-
-        print(sum([self.primal_solution.GetSolution(e.y) for e in self.edges.values()]))
-        print(sum([self.primal_solution.GetSolution(e.z) for e in self.edges.values()]))
-
-
-def build_block_moving_gcs_tsp(
-    start: npt.NDArray, target: npt.NDArray, block_dim: int, num_blocks: int
-) -> TSPasGCS:
-    bd = block_dim
-    num_objects = num_blocks + 1
-    # check lengths
-    assert len(start) == block_dim * num_objects
-    assert len(target) == block_dim * num_objects
-    # naming
-    def s(i):
-        return "s" + str(i)
-
-    def t(i):
-        return "t" + str(i)
-
-    def e(i, j):
-        return i + "_" + j
-
-    gcs = TSPasGCS()
-
-    # add all vertices
-    for i in range(num_objects):
-        start_i = start[i * bd : i * bd + bd]
-        target_i = target[i * bd : i * bd + bd]
-        # pre-processing: if start_i = target_i, there is no need to move that object
-        # must do same check over edges
-        # if not (i > 0 and np.allclose(start_i, target_i)):
-        gcs.add_vertex(s(i), start_i)
-        gcs.add_vertex(t(i), target_i)
-
-    # add all edges
-    # add edge to from initial arm location to final arm location
-    gcs.add_edge(s(0), t(0), e(s(0), t(0)))
-    for i in range(1, num_objects):
-        # start is connected to any object start locations
-        gcs.add_edge(s(0), s(i), e(s(0), s(i)))
-        # after ungrasping any object, we can move to arm target location
-        gcs.add_edge(t(i), t(0), e(t(i), t(0)))
-        # once we pick up an object, we must move it to the goal
-        gcs.add_edge(s(i), t(i), e(s(i), t(i)))
-        # after ungrasping an object, we can go and pick up any other object
-        for j in range(1, num_objects):
-            if i != j:
-                gcs.add_edge(t(i), s(j), e(t(i), s(j)))
-
-    # for each edge, add the cost on the edge
-    for e in gcs.edges.values():
-        e.set_cost(np.linalg.norm(e.left.value - e.right.value))
-
-    # set start and target
-    gcs.set_start_target("s0", "t0")
-    return gcs

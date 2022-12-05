@@ -144,8 +144,12 @@ def make_simple_transparent_gcs_test(
             target_state += block_state
         final_point = Point(np.array(target_state))
     gcs.build_the_graph(initial_point, 0, final_point, 0)
-    gcs.solve(use_convex_relaxation=use_convex_relaxation, max_rounded_paths=max_rounded_paths)
-    if gcs.solution.is_success() and (max_rounded_paths > 0 or use_convex_relaxation == False):
+    gcs.solve(
+        use_convex_relaxation=use_convex_relaxation, max_rounded_paths=max_rounded_paths
+    )
+    if gcs.solution.is_success() and (
+        max_rounded_paths > 0 or use_convex_relaxation == False
+    ):
         gcs.verbose_solution_description()
     if display_graph:
         gcs.display_graph(graph_name)
@@ -209,7 +213,9 @@ def make_simple_exp(
         final_point = Point(np.array(target_state))
 
     gcs.build_the_graph(initial_point, 0, final_point, 0)
-    gcs.solve(use_convex_relaxation=use_convex_relaxation, max_rounded_paths=max_rounded_paths)
+    gcs.solve(
+        use_convex_relaxation=use_convex_relaxation, max_rounded_paths=max_rounded_paths
+    )
     # gcs.verbose_solution_description()
     if display_graph:
         gcs.display_graph()

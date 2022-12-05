@@ -45,7 +45,9 @@ def sampling_based_IRIS_tesselation(
         if previous_sample is None:
             new_sample = domain.UniformSample(generator)
         else:
-            new_sample = domain.UniformSample(generator, previous_sample=previous_sample)
+            new_sample = domain.UniformSample(
+                generator, previous_sample=previous_sample
+            )
         previous_sample = new_sample
         # check that a sampled point is not in any obstacle or in already attained set
         sample_not_inside_obstacle_or_existing_sets = True

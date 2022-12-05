@@ -16,7 +16,9 @@ nb = 9
 # target = np.random.uniform(0, 50, nb+1)
 
 start = np.array([0.0, 1, 2, 3, 4, 5, 6, 7, 8, 9]) + np.random.normal(0, 0.001, nb + 1)
-target = np.array([2.0, 2, 4, 5, 6, 7, 30, 9, 11, 12]) + np.random.normal(0, 0.001, nb + 1)
+target = np.array([2.0, 2, 4, 5, 6, 7, 30, 9, 11, 12]) + np.random.normal(
+    0, 0.001, nb + 1
+)
 
 # start = np.array([0.0, 1, 2, 3, 4, 5, 6, 7, 10, 20]) + np.random.normal(0,0.001, nb+1)
 # target = np.array([2.0, 2, 4, 5, 6, 7, 30, 9, 11, 12]) + np.random.normal(0,0.001, nb+1)

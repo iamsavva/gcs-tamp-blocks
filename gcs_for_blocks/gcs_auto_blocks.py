@@ -82,12 +82,16 @@ class GCSAutonomousBlocks(GCSforBlocks):
         self.add_vertex(target_state, "target")
 
         ############################
-        start_set_string = self.set_gen.construct_rels_representation_from_point(start_state.x())
+        start_set_string = self.set_gen.construct_rels_representation_from_point(
+            start_state.x()
+        )
         start_set = self.set_gen.rels2set[start_set_string]
         self.add_vertex(start_set, start_set_string)
         self.connect_vertices("start", start_set_string, EdgeOptAB.equality_edge())
 
-        target_set_string = self.set_gen.construct_rels_representation_from_point(target_state.x())
+        target_set_string = self.set_gen.construct_rels_representation_from_point(
+            target_state.x()
+        )
         target_set = self.set_gen.rels2set[target_set_string]
         self.add_vertex(target_set, target_set_string)
         self.connect_vertices(target_set_string, "target", EdgeOptAB.target_edge())
@@ -116,7 +120,9 @@ class GCSAutonomousBlocks(GCSforBlocks):
                     # find neighbours of f
 
                     # nbhd = self.set_gen.get_1_step_neighbours(f)
-                    nbhd = self.set_gen.get_useful_1_step_neighbours(f, target_set_string)
+                    nbhd = self.set_gen.get_useful_1_step_neighbours(
+                        f, target_set_string
+                    )
                     for nbh in nbhd:
                         # for each neighbour: if it's not in current / previous layers -- add it
                         if nbh not in already_added:

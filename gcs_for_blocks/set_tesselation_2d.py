@@ -52,7 +52,9 @@ class SetTesselation:
         for relation_index, relation in enumerate(rels):
             if relation != "X":
                 i, j = self.index2relation[relation_index]
-                A_relation, b_relation = self.get_constraints_for_relation(relation, i, j)
+                A_relation, b_relation = self.get_constraints_for_relation(
+                    relation, i, j
+                )
                 A = np.vstack((A, A_relation))
                 b = np.hstack((b, b_relation))
         return HPolyhedron(A, b)
@@ -64,7 +66,9 @@ class SetTesselation:
             return self.get_constraints_for_relation_asym(relation, i, j)
 
     def get_constraints_for_relation_asym(self, relation: str, i, j):
-        assert relation != "X", "Shouldn't be calling get_constraints_for_relation_asym on X"
+        assert (
+            relation != "X"
+        ), "Shouldn't be calling get_constraints_for_relation_asym on X"
         w = self.opt.block_width
         bd = self.opt.block_dim
         A = np.zeros((2, self.opt.state_dim))
@@ -87,7 +91,9 @@ class SetTesselation:
         return A, b
 
     def get_constraints_for_relation_sym(self, relation: str, i, j):
-        assert relation != "X", "Shouldn't be calling get_constraints_for_relation_sym on X"
+        assert (
+            relation != "X"
+        ), "Shouldn't be calling get_constraints_for_relation_sym on X"
         w = self.opt.block_width
         bd = self.opt.block_dim
         sd = self.opt.state_dim
@@ -141,7 +147,9 @@ class SetTesselation:
                 st[1] = st[0] + 1
         assert st == [self.opt.num_blocks - 1, self.opt.num_blocks], "checking my math"
 
-    def construct_rels_representation_from_point(self, point: npt.NDArray, expansion=None) -> str:
+    def construct_rels_representation_from_point(
+        self, point: npt.NDArray, expansion=None
+    ) -> str:
         """
         Given a point, find a string of relations for it
         """
@@ -176,7 +184,10 @@ class SetTesselation:
         for i in range(len(rels)):
             for j in range(self.opt.number_of_relations - 1):
                 lrels[i] = self.opt.rel_iter(lrels[i])
-                if self.opt.rel_inv(rels[i]) != lrels[i] and "".join(lrels) in self.rels2set:
+                if (
+                    self.opt.rel_inv(rels[i]) != lrels[i]
+                    and "".join(lrels) in self.rels2set
+                ):
                     nbhd += ["".join(lrels)]
             lrels[i] = self.opt.rel_iter(lrels[i])
         return nbhd
@@ -189,7 +200,9 @@ class SetTesselation:
         """
         assert "X" not in rels, "Un-grounded relation in relation string! " + rels
         assert len(rels) == self.opt.rels_len, "Wrong num of relations: " + rels
-        assert len(target) == self.opt.rels_len, "Wrong num of relations in target: " + target
+        assert len(target) == self.opt.rels_len, (
+            "Wrong num of relations in target: " + target
+        )
 
         nbhd = []
         for i in range(len(rels)):

@@ -88,7 +88,12 @@ class AlignedSet:
         return self.set_is_non_empty
 
     def intersects_with(self, other):
-        if self.r <= other.l or other.r <= self.l or self.a <= other.b or other.a <= self.b:
+        if (
+            self.r <= other.l
+            or other.r <= self.l
+            or self.a <= other.b
+            or other.a <= self.b
+        ):
             return False
         return True
 
@@ -115,7 +120,16 @@ class AlignedSet:
         return False
 
     def __repr__(self):
-        return "L" + str(self.l) + " R" + str(self.r) + " B" + str(self.b) + " A" + str(self.a)
+        return (
+            "L"
+            + str(self.l)
+            + " R"
+            + str(self.r)
+            + " B"
+            + str(self.b)
+            + " A"
+            + str(self.a)
+        )
 
     def get_direction_sets(self, bounding_box: "AlignedSet"):
         assert self.is_inside(bounding_box)
@@ -125,9 +139,13 @@ class AlignedSet:
         # right
         sets.append(AlignedSet(r=bounding_box.r, l=self.r, a=self.a, b=self.b))
         # below
-        sets.append(AlignedSet(r=bounding_box.r, l=bounding_box.l, a=self.b, b=bounding_box.b))
+        sets.append(
+            AlignedSet(r=bounding_box.r, l=bounding_box.l, a=self.b, b=bounding_box.b)
+        )
         # above
-        sets.append(AlignedSet(r=bounding_box.r, l=bounding_box.l, b=self.a, a=bounding_box.a))
+        sets.append(
+            AlignedSet(r=bounding_box.r, l=bounding_box.l, b=self.a, a=bounding_box.a)
+        )
         return sets
 
     def get_rectangle(self, color: str):
@@ -201,9 +219,13 @@ def locations_to_aligned_sets(start, target, block_width):
     bw = block_width
     sets = []
     for i, (x, y) in enumerate(start):
-        sets.append(AlignedSet(l=x - bw, r=x + bw, b=y - bw, a=y + bw, name="s" + str(i)))
+        sets.append(
+            AlignedSet(l=x - bw, r=x + bw, b=y - bw, a=y + bw, name="s" + str(i))
+        )
     for i, (x, y) in enumerate(target):
-        sets.append(AlignedSet(l=x - bw, r=x + bw, b=y - bw, a=y + bw, name="t" + str(i)))
+        sets.append(
+            AlignedSet(l=x - bw, r=x + bw, b=y - bw, a=y + bw, name="t" + str(i))
+        )
     return sets
 
 
@@ -224,7 +246,10 @@ def plot_list_of_aligned_sets(
                 color = "grey"
             else:
                 color = "white"
-            if a_set.name[0] in ("s", "t") and int(a_set.name[1:]) == moving_block_index:
+            if (
+                a_set.name[0] in ("s", "t")
+                and int(a_set.name[1:]) == moving_block_index
+            ):
                 color = "limegreen"
 
         ax.add_patch(a_set.get_rectangle(color))

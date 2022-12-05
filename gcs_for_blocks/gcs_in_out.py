@@ -34,7 +34,9 @@ class GCSforBlocksOneInOneOut(GCSforBlocks):
         self.add_vertex(start_state, "start")
         # add vertices into horizon 0
         for set_id in self.sets_per_mode[self.start_mode]:
-            self.add_vertex(self.get_convex_set_for_set_id(set_id), self.get_vertex_name(0, set_id))
+            self.add_vertex(
+                self.get_convex_set_for_set_id(set_id), self.get_vertex_name(0, set_id)
+            )
         # add vertices into horizon 1 through last
         for layer in range(1, self.opt.horizon):
             for mode in self.modes_per_layer[layer]:
@@ -84,7 +86,9 @@ class GCSforBlocksOneInOneOut(GCSforBlocks):
                     )
                 # add edges into next mode-out points
                 in_out_name = self.get_vertex_name(layer, mode, True)
-                left_vertex_names = self.set_names_for_layer(self.sets_per_mode[mode], layer)
+                left_vertex_names = self.set_names_for_layer(
+                    self.sets_per_mode[mode], layer
+                )
                 self.connect_to_vertex_on_the_left(
                     left_vertex_names, in_out_name, EdgeOptions.into_in_out_edge()
                 )
@@ -111,7 +115,9 @@ class GCSforBlocksOneInOneOut(GCSforBlocks):
         for layer in range(self.opt.horizon):
             # if that layer has a target mode
             if self.target_mode in self.modes_per_layer[layer]:
-                names_of_sets_with_target += [self.get_vertex_name(layer, self.target_mode, True)]
+                names_of_sets_with_target += [
+                    self.get_vertex_name(layer, self.target_mode, True)
+                ]
         # add the edges
         self.connect_to_vertex_on_the_left(
             names_of_sets_with_target, "target", EdgeOptions.equality_edge()
@@ -156,12 +162,16 @@ class GCSforBlocksOneInOneOut(GCSforBlocks):
         # find edges with non-zero flow
         flow_variables = [e.phi() for e in self.gcs.Edges()]
         flow_results = [self.solution.GetSolution(p) for p in flow_variables]
-        active_edges = [edge for edge, flow in zip(self.gcs.Edges(), flow_results) if flow >= 0.99]
+        active_edges = [
+            edge for edge, flow in zip(self.gcs.Edges(), flow_results) if flow >= 0.99
+        ]
         # using these edges, find the path from start to target
         path = self.find_path_to_target(active_edges, self.name_to_vertex["start"])
         modes = [v.name() for v in path]
         modes = [
-            str(self.get_mode_from_vertex_name(mode)) if mode not in ("start", "target") else mode
+            str(self.get_mode_from_vertex_name(mode))
+            if mode not in ("start", "target")
+            else mode
             for mode in modes
         ]
         vertex_values = np.vstack([self.solution.GetSolution(v.x()) for v in path])

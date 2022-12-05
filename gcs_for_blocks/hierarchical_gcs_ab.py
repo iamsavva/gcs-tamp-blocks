@@ -124,7 +124,9 @@ class HierarchicalGraph:
         TODO: there are probably much more effective orderings of relation expansions!
         TODO: investigate
         """
-        assert self.not_fully_expanded, "Fully expanded and asking to expand a relation!"
+        assert (
+            self.not_fully_expanded
+        ), "Fully expanded and asking to expand a relation!"
         for index, relation in enumerate(self.expanded):
             if relation == "X":
                 return index, self.expanded[:index] + "Y" + self.expanded[index + 1 :]
@@ -159,12 +161,16 @@ class HierarchicalGraph:
                     + " ".join(graph_names)
                 )
 
-    def get_solution_path(self, solution, start_vertex) -> T.Tuple[T.List[str], npt.NDArray]:
+    def get_solution_path(
+        self, solution, start_vertex
+    ) -> T.Tuple[T.List[str], npt.NDArray]:
         """Given a solved GCS problem, and assuming it's tight, find a path from start to target"""
         # find edges with non-zero flow
         flow_variables = [e.phi() for e in self.gcs.Edges()]
         flow_results = [solution.GetSolution(p) for p in flow_variables]
-        active_edges = [edge for edge, flow in zip(self.gcs.Edges(), flow_results) if flow > 0.01]
+        active_edges = [
+            edge for edge, flow in zip(self.gcs.Edges(), flow_results) if flow > 0.01
+        ]
         return self.find_path_to_target(active_edges, start_vertex)
 
     def solve(self, verbose=False):
@@ -271,7 +277,9 @@ class HierarchicalGCSAB:
             solve_time.start()
             solution_cost, solution_vertices = self.graph.solve()
             solve_time.end()
-            INFO("Solving at " + str(self.num_solves) + " cost is " + str(solution_cost))
+            INFO(
+                "Solving at " + str(self.num_solves) + " cost is " + str(solution_cost)
+            )
 
             if solution_cost == float("inf"):
                 # that problem was infeasible
@@ -370,7 +378,9 @@ class HierarchicalGCSAB:
                 prev_node = solution_node
             elif node.name() == "target":
                 solution_target_vertex = solution_node
-                self.add_edge(solution_graph, prev_node, solution_node, EdgeOptAB.target_edge())
+                self.add_edge(
+                    solution_graph, prev_node, solution_node, EdgeOptAB.target_edge()
+                )
             else:
                 if prev_node.name() == "start":
                     self.add_edge(
@@ -380,7 +390,9 @@ class HierarchicalGCSAB:
                         EdgeOptAB.equality_edge(),
                     )
                 else:
-                    self.add_edge(solution_graph, prev_node, solution_node, EdgeOptAB.move_edge())
+                    self.add_edge(
+                        solution_graph, prev_node, solution_node, EdgeOptAB.move_edge()
+                    )
                 prev_node = solution_node
         return HierarchicalGraph(
             solution_graph,
@@ -421,12 +433,18 @@ class HierarchicalGCSAB:
                 start_vertex = self.add_vertex(graph, self.start_state, "start")
                 start_col_v = start_vertex
             elif node == "target":
-                assert target_col_v is not None, "target column is none mate this is wrong"
+                assert (
+                    target_col_v is not None
+                ), "target column is none mate this is wrong"
                 target_vertex = self.add_vertex(graph, self.target_state, "target")
-                self.add_edge(graph, target_col_v, target_vertex, EdgeOptAB.target_edge())
+                self.add_edge(
+                    graph, target_col_v, target_vertex, EdgeOptAB.target_edge()
+                )
             else:
                 grounded_start_name = (
-                    node[:next_relation_index] + start_relation + node[next_relation_index + 1 :]
+                    node[:next_relation_index]
+                    + start_relation
+                    + node[next_relation_index + 1 :]
                 )
                 grounded_start_vertex = self.add_vertex(
                     graph,
@@ -443,7 +461,9 @@ class HierarchicalGCSAB:
                         EdgeOptAB.equality_edge(),
                     )
                 else:
-                    self.add_edge(graph, start_col_v, grounded_start_vertex, EdgeOptAB.move_edge())
+                    self.add_edge(
+                        graph, start_col_v, grounded_start_vertex, EdgeOptAB.move_edge()
+                    )
                 start_col_v = grounded_start_vertex
 
                 if start_relation == target_relation:
@@ -477,10 +497,14 @@ class HierarchicalGCSAB:
                 else:
                     nbh = self.opt.rel_nbhd[start_relation]
                     grounded_nbh_0_name = (
-                        node[:next_relation_index] + nbh[0] + node[next_relation_index + 1 :]
+                        node[:next_relation_index]
+                        + nbh[0]
+                        + node[next_relation_index + 1 :]
                     )
                     grounded_nbh_1_name = (
-                        node[:next_relation_index] + nbh[1] + node[next_relation_index + 1 :]
+                        node[:next_relation_index]
+                        + nbh[1]
+                        + node[next_relation_index + 1 :]
                     )
                     grounded_nbh_0_vertex = self.add_vertex(
                         graph,
@@ -572,14 +596,19 @@ class HierarchicalGCSAB:
     ###################################################################################
     # Adding edges and vertices
 
-    def add_vertex(self, graph: GraphOfConvexSets, convex_set: HPolyhedron, name: str) -> None:
+    def add_vertex(
+        self, graph: GraphOfConvexSets, convex_set: HPolyhedron, name: str
+    ) -> None:
         """
         Define a vertex with a convex set.
         """
         # check myself
         vertex_names = [v.name() for v in graph.Vertices()]
         assert name not in vertex_names, (
-            "Adding vertex again! Vertex: " + name + "\nAlready in: " + str(vertex_names)
+            "Adding vertex again! Vertex: "
+            + name
+            + "\nAlready in: "
+            + str(vertex_names)
         )
         vertex = graph.AddVertex(convex_set, name)
         return vertex

@@ -89,6 +89,7 @@ class AlignedSet:
 
     def intersects_with(self, other):
         if self.r <= other.l or other.r <= self.l or self.a <= other.b or other.a <= self.b:
+        # if self.r < other.l or other.r < self.l or self.a < other.b or other.a < self.b:
             return False
         return True
 
@@ -197,13 +198,21 @@ def axis_aligned_tesselation(bounding_box: AlignedSet, obstacles: T.List[Aligned
     return all_sets_dict
 
 
-def locations_to_aligned_sets(start, target, block_width):
+def locations_to_aligned_sets(start, target, block_width, bounding_box):
     bw = block_width
     sets = []
     for i, (x, y) in enumerate(start):
-        sets.append(AlignedSet(l=x - bw, r=x + bw, b=y - bw, a=y + bw, name="s" + str(i)))
+        obst = AlignedSet(l=x - bw, r=x + bw, b=y - bw, a=y + bw, name="s" + str(i))
+        nobst = obst.intersection(bounding_box)
+        nobst.name = "s" + str(i)
+        sets.append(nobst)
+        # sets.append(AlignedSet(l=x - bw, r=x + bw, b=y - bw, a=y + bw, name="s" + str(i)))
     for i, (x, y) in enumerate(target):
-        sets.append(AlignedSet(l=x - bw, r=x + bw, b=y - bw, a=y + bw, name="t" + str(i)))
+        obst = AlignedSet(l=x - bw, r=x + bw, b=y - bw, a=y + bw, name="t" + str(i))
+        nobst = obst.intersection(bounding_box)
+        nobst.name = "t" + str(i)
+        sets.append(nobst)
+        # sets.append(AlignedSet(l=x - bw, r=x + bw, b=y - bw, a=y + bw, name="t" + str(i)))
     return sets
 
 
@@ -259,7 +268,7 @@ if __name__ == "__main__":
     # start = [(1,1)]
     # target = [(5,11)]
 
-    obstacles = locations_to_aligned_sets(start, target, block_width)
+    obstacles = locations_to_aligned_sets(start, target, block_width, bounding_box)
     sets = axis_aligned_tesselation(bounding_box, obstacles)
 
     # fix

@@ -39,7 +39,7 @@ class BlockMovingObstacleAvoidance:
         self.bounding_box = bounding_box
         # get obstacles
         obstacles = locations_to_aligned_sets(
-            self.start_block_pos, self.target_block_pos, block_width
+            self.start_block_pos, self.target_block_pos, block_width, self.bounding_box
         )
         # make a tesselation
         self.convex_sets = axis_aligned_tesselation(bounding_box.copy(), obstacles)

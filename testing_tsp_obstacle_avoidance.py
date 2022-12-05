@@ -15,12 +15,14 @@ from gcs_for_blocks.util import timeit, INFO, WARN, ERROR, YAY
 from gcs_for_blocks.tsp_obstacle_avoidance import BlockMovingObstacleAvoidance
 from draw_2d import Draw2DSolution
 
-bounding_box = AlignedSet(b=0, a=5, l=0, r=10)
-ub = np.array([bounding_box.r + 1, bounding_box.a])
+bounding_box = AlignedSet(b=0, a=5, l=0, r=9)
+ub = np.array([bounding_box.r, bounding_box.a])
 block_width = 1
 
-start = [(1, 4), (1, 1), (1, 3), (3, 3), (3, 1)]
-target = [(1, 4), (9, 1), (7, 1), (7, 3), (9, 3)]
+start =  [(1-0.5, 4-0.5), (1-0.5, 1-0.5), (1-0.5, 3-0.5), (3-0.5, 3-0.5), (3-0.5, 1-0.5)]
+target = [(1-0.5, 4-0.5), (9-0.5, 1-0.5), (7-0.5, 1-0.5), (7-0.5, 3-0.5), (9-0.5, 3-0.5)]
+# start = [(1, 4), (1, 1), (1, 3), (3, 3), (3, 1)]
+# target = [(1, 4), (9, 1), (7, 1), (7, 3), (9, 3)]
 
 convex_relaxation = False
 

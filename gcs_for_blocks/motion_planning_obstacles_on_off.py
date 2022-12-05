@@ -16,82 +16,84 @@ from .axis_aligned_set_tesselation_2d import (
 from .tsp_solver import Vertex, Edge, TSPasGCS
 
 
-class MotionPlanning(TSPasGCS):
-    def __init__(self):
-        self.edges = dict()  # type: T.Dict[str, Edge]
-        self.vertices = dict()  # type:  T.Dict[str, Vertex]
-        self.start = None  # str
-        self.target = None  # str
-
-        self.prog = None  # type: MathematicalProgram
-        self.solution = None
-
-        self.bounding_box = None
-        self.num_blocks = None
-        self.convex_sets = None
-        self.moving_block_index = None
-
-    def set_bounding_box(self, l: float, r: float, a: float, b: float):
-        self.bounding_box = AlignedSet(l=l, r=r, a=a, b=b)
-
-    def set_bounding_box_aligned_set(self, aligned_set: AlignedSet):
-        self.bounding_box = aligned_set
-
-    def build_the_graph(
+class MotionPlanning:
+    def __init__(
         self,
-        start_pos: T.List[T.Tuple[float, float]],
-        target_pos: T.List[T.Tuple[float, float]],
-        visitations: npt.NDArray,
+        prog: MathematicalProgram,
+        all_vertices:T.Dict[str, Vertex],
+        all_edges:T.Dict[str, Edge],
+        bounding_box: AlignedSet,
+        start_block_pos: T.List[T.Tuple[float, float]],
+        target_block_pos: T.List[T.Tuple[float, float]],
+        convex_sets: T.Dict[str, AlignedSet],
         moving_block_index: int,
-        block_width: float = 1.0,
+        convex_relaxation=False
     ):
-        # start_block_pos = start_pos[1:]
-        # target_block_pos = target_pos[1:]
-        start_block_pos = start_pos
-        target_block_pos = target_pos
-        num_blocks = len(start_block_pos)
-        self.start_block_pos = [np.array(x) for x in start_block_pos]
-        self.target_block_pos = [np.array(x) for x in target_block_pos]
+        self.convex_relaxation = convex_relaxation
+        self.num_blocks = len(start_block_pos) # type: int
+        self.moving_block_index = moving_block_index # type: int
+        self.start_block_pos = [np.array(x) for x in start_block_pos] # type: T.List[npt.NDArray]
+        self.target_block_pos = [np.array(x) for x in target_block_pos] # type: T.List[npt.NDArray]
 
-        self.start = "s" + str(moving_block_index) + "_tsp"
-        self.target = "t" + str(moving_block_index) + "_tsp"
-        self.start_set = "s" + str(moving_block_index)
-        self.target_set = "t" + str(moving_block_index)
+        smbi = str(self.moving_block_index) # type: str
+        self.start_tsp = "s" + smbi + "_tsp" # type: str
+        self.target_tsp = "t" + smbi + "_tsp" # type: str
+        self.start_mp = "s" + smbi + "_mp" + smbi # type: str
+        self.target_mp = "t" + smbi + "_mp" + smbi # type: str
 
-        self.num_blocks = len(start_block_pos)
-        self.visitations = visitations
-        self.moving_block_index = moving_block_index
+        self.bounding_box = bounding_box
+        self.convex_sets = dict()
+        for name in convex_sets:
+            new_name = name + "_mp" + str(self.moving_block_index)
+            self.convex_sets[new_name] = convex_sets[name].copy()
+            self.convex_sets[new_name].name = new_name
 
-        assert visitations[moving_block_index] == 1
-        assert len(target_block_pos) == num_blocks
-        assert len(visitations) == num_blocks
-        assert self.bounding_box is not None
 
-        # get obstacles
-        obstacles = locations_to_aligned_sets(start_block_pos, target_block_pos, block_width)
+        assert len(target_block_pos) == self.num_blocks 
 
-        # make a tesselation
-        self.convex_sets = axis_aligned_tesselation(self.bounding_box.copy(), obstacles)
+        self.prog = prog
+        self.all_vertices = all_vertices
+        self.all_edges = all_edges
+        self.vertices = dict()
+        self.edges = dict()
+        self.vertices[self.start_tsp] = self.all_vertices[self.start_tsp]
+        self.vertices[self.target_tsp] = self.all_vertices[self.target_tsp]
 
+        self.add_mp_vertices_and_edges()
+        self.add_mp_variables_to_prog()
+        self.add_mp_constraints_to_prog()
+
+    def add_vertex(self, name: str, value: npt.NDArray = np.array([])):
+        assert name not in self.vertices, "Vertex with name " + name + " already exists"
+        assert name not in self.all_vertices, "Vertex with name " + name + " already exists in og"
+        self.all_vertices[name] = Vertex(name, value)
+        self.vertices[name] = self.all_vertices[name]
+
+    def add_edge(self, left_name: str, right_name: str):
+        edge_name = left_name + "_" + right_name
+        assert edge_name not in self.edges, "Edge " + edge_name + " already exists in new edges"
+        assert edge_name not in self.all_edges, "Edge " + edge_name + " already exists in og edges"
+        self.all_edges[edge_name] = Edge( self.all_vertices[left_name], self.all_vertices[right_name], edge_name)
+        self.edges[edge_name] = self.all_edges[edge_name]
+        self.all_vertices[left_name].add_edge_out(edge_name)
+        self.all_vertices[right_name].add_edge_in(edge_name)
+
+    def add_mp_vertices_and_edges(self):
         ############################
-        # add all vertices
-        ############################
+        # tsp start/target should already be here
+        assert self.start_tsp in self.vertices
+        assert self.target_tsp in self.vertices
 
-        # add start vertex
-        self.add_vertex(self.start)
-        # add target vertex
-        self.add_vertex(self.target)
-        # add set vertices
+        # add mp vertices
         for aligned_set in self.convex_sets.values():
             self.add_vertex(aligned_set.name)
 
         ############################
         # add all edges
-        ############################
-        # add edge from si to appropriate set, from ti to appropriate set
-        self.add_edge(self.start, self.start_set)
-        self.add_edge(self.target_set, self.target)
-        # add all edges
+        # add edge from between tsp portion and mp portion
+        self.add_edge(self.start_tsp, self.start_mp)
+        self.add_edge(self.target_mp, self.target_tsp)
+        # add all edges within the mp portion
         for set1 in self.convex_sets.values():
             for set2 in self.convex_sets.values():
                 # no repeats
@@ -99,70 +101,12 @@ class MotionPlanning(TSPasGCS):
                     # add edge between set1 and set2
                     self.add_edge(set1.name, set2.name)
 
-    def build_the_program(self, convex_relaxation=True):
-        x = timeit()
-        self.prog = MathematicalProgram()
-        self.add_variables(convex_relaxation)
-        self.add_constraints()
-        x.dt("Building the program")
-        self.primal_solution = Solve(self.prog)
-        x.dt("Solving the program")
-
-        if self.primal_solution.is_success():
-            YAY("Optimal primal cost is %.5f" % self.primal_solution.get_optimal_cost())
-        else:
-            ERROR("PRIMAL SOLVE FAILED!")
-            ERROR("Optimal primal cost is %.5f" % self.primal_solution.get_optimal_cost())
-            return
-
-        flows = [self.primal_solution.GetSolution(e.phi) for e in self.edges.values()]
-        not_tight = np.any(np.logical_and(0.01 < np.array(flows), np.array(flows) < 0.99))
-        if not_tight:
-            WARN("CONVEX RELAXATION NOT TIGHT")
-        else:
-            YAY("CONVEX RELAXATION IS TIGHT")
-
-        flow_vars = [(e, self.primal_solution.GetSolution(e.phi)) for e in self.edges.values()]
-
-        non_zero_edges = [e for (e, flow) in flow_vars if flow > 0.01]
-        v_path, e_path = self.find_path_to_target(non_zero_edges, self.vertices[self.start])
-        loc_path = [self.primal_solution.GetSolution(e.z) for e in e_path]
-        loc_path[0] = self.primal_solution.GetSolution(e_path[1].y)
-        return loc_path
-
-    def find_path_to_target(self, edges, start):
-        """Given a set of active edges, find a path from start to target"""
-        edges_out = [e for e in edges if e.left == start]
-        assert len(edges_out) == 1
-        current_edge = edges_out[0]
-        v = current_edge.right
-
-        target_reached = v.name == self.target
-
-        if target_reached:
-            return [start] + [v], [current_edge]
-        else:
-            v, e = self.find_path_to_target(edges, v)
-            return [start] + v, [current_edge] + e
-
-    def add_variables(self, convex_relaxation=True):
-        ####################################
-        # add variables to start and target vertices
-        # associated vaiables are visitations, n x 1, each 0 or 1
-        self.vertices[self.start].set_v(
-            self.prog.NewContinuousVariables(self.num_blocks, "visit_" + self.start)
-        )
-        self.vertices[self.target].set_v(
-            self.prog.NewContinuousVariables(self.num_blocks, "visit_" + self.target)
-        )
-        # not adding order here due to irrelevance
-        # no other vertex has variables associated with it
-
+    def add_mp_variables_to_prog(self):
         ###################################
         # add edge variables
         for e in self.edges.values():
             # add flow variable
-            if convex_relaxation:
+            if self.convex_relaxation:
                 # cotninuous variable, flow between 0 and 1
                 e.set_phi(self.prog.NewContinuousVariables(1, "phi_" + e.name)[0])
                 self.prog.AddLinearConstraint(e.phi, 0.0, 1.0)
@@ -170,23 +114,12 @@ class MotionPlanning(TSPasGCS):
                 e.set_phi(self.prog.NewBinaryVariables(1, "phi_" + e.name)[0])
 
             # if the edge is not from start
-            if e.left.name != self.start:
-                # set left and right position variables
-                # y is left_pos
-                # z is right_pos
+            if e.left.name != self.start_tsp:
+                # y is left_pos, z is right_pos
                 e.set_y(self.prog.NewContinuousVariables(2, "y_" + e.name))
                 e.set_z(self.prog.NewContinuousVariables(2, "z_" + e.name))
 
-    def add_constraints(self):
-        ###################################
-        # visitiations box constraints
-        visitation_box = Box(
-            lb=np.zeros(self.num_blocks),
-            ub=np.ones(self.num_blocks),
-            state_dim=self.num_blocks,
-        )
-        vA, vb = visitation_box.get_hpolyhedron()
-
+    def add_mp_constraints_to_prog(self):
         ###################################
         # PER VERTEX
         for v in self.vertices.values():
@@ -194,23 +127,16 @@ class MotionPlanning(TSPasGCS):
             sum_of_y = sum([self.edges[e].y for e in v.edges_out])
             sum_of_z = sum([self.edges[e].z for e in v.edges_in])
             # it's a start node
-            if v.name == self.start:
-                # add visitations box constraint
-                self.prog.AddLinearConstraint(le(vA @ v.v, vb))
-                # add visitation equality constraint
-                self.prog.AddLinearConstraint(eq(v.v, self.visitations))
+            if v.name == self.start_tsp:
+                continue
             # it's a target node
-            elif v.name == self.target:
-                # add visitations box constraint
-                self.prog.AddLinearConstraint(le(vA @ v.v, vb))
-                # add visitation equality constraint to visitations of start
-                self.prog.AddLinearConstraint(eq(v.v, self.vertices[self.start].v))
+            elif v.name == self.target_tsp:
                 # sum pos out is the target-pos
                 block_target_pos = self.target_block_pos[self.moving_block_index]
                 self.prog.AddLinearConstraint(eq(sum_of_z, block_target_pos))
                 # TODO: must add cost to target too
             # it's a start-set node
-            elif v.name == self.start_set:
+            elif v.name == self.start_mp:
                 # sum pos out is the start-pos
                 block_start_pos = self.start_block_pos[self.moving_block_index]
                 self.prog.AddLinearConstraint(eq(sum_of_y, block_start_pos))
@@ -222,9 +148,9 @@ class MotionPlanning(TSPasGCS):
             # flow in = flow_out constraint
             flow_in = sum([self.edges[e].phi for e in v.edges_in])
             flow_out = sum([self.edges[e].phi for e in v.edges_out])
-            if v.name == self.start:
+            if v.name == self.start_tsp:
                 self.prog.AddLinearConstraint(flow_out == 1)
-            elif v.name == self.target:
+            elif v.name == self.target_tsp:
                 self.prog.AddLinearConstraint(flow_in == 1)
             else:
                 self.prog.AddLinearConstraint(flow_in == flow_out)
@@ -235,7 +161,7 @@ class MotionPlanning(TSPasGCS):
         # PER EDGE
         for e in self.edges.values():
             # for each motion planning edge
-            if e.left.name != self.start and e.right.name != self.target:
+            if e.left.name != self.start_tsp and e.right.name != self.target_tsp:
                 left_aligned_set = self.convex_sets[e.left.name]
                 lA, lb = left_aligned_set.get_perspective_hpolyhedron()
                 right_aligned_set = self.convex_sets[e.right.name]
@@ -245,7 +171,7 @@ class MotionPlanning(TSPasGCS):
                 # right is in the set that corresponds to left and right
                 self.prog.AddLinearConstraint(le(lA @ np.append(e.z, e.phi), lb))
                 self.prog.AddLinearConstraint(le(rA @ np.append(e.z, e.phi), rb))
-            if e.right.name == self.target:
+            if e.right.name == self.target_tsp:
                 # TODO: this should be redundant
                 left_aligned_set = self.convex_sets[e.left.name]
                 lA, lb = left_aligned_set.get_perspective_hpolyhedron()
@@ -254,24 +180,25 @@ class MotionPlanning(TSPasGCS):
 
             # turning obstacles on and off
             # edge goes into a start obstacle
-            if e.left.name != self.start and e.right.name[0] == "s":
-                obstacle_num = int(e.right.name[1:])
-                x = np.array([self.vertices[self.start].v[obstacle_num], e.phi])
+            if e.left.name != self.start_tsp and e.right.name[0] == "s":
+                obstacle_num = int(e.right.name[1:-4])
+                x = np.array([self.vertices[self.start_tsp].v[obstacle_num], e.phi])
                 A = np.array([[1, 0], [0, -1], [-1, 1]])
                 b = np.array([1, 0, 0])
                 self.prog.AddLinearConstraint(le(A @ x, b))
             # edge goes into a target obstacle
-            if e.right.name != self.target and e.right.name[0] == "t":
-                obstacle_num = int(e.right.name[1:])
+            if e.right.name != self.target_tsp and e.right.name[0] == "t":
+                obstacle_num = int(e.right.name[1:-4])
                 if obstacle_num != self.moving_block_index:
-                    x = np.array([self.vertices[self.start].v[obstacle_num], e.phi])
+                    x = np.array([self.vertices[self.start_tsp].v[obstacle_num], e.phi])
                     A = np.array([[-1, 0], [0, -1], [1, 1]])
                     b = np.array([0, 0, 1])
                     self.prog.AddLinearConstraint(le(A @ x, b))
 
             # add cost
-            if e.left.name != self.start:
+            if e.left.name != self.start_tsp:
                 A = np.array([[1, 0, -1, 0], [0, 1, 0, -1]])
                 b = np.array([0, 0])
-                self.prog.AddL2NormCostUsingConicConstraint(A, b, np.append(e.y, e.z))
                 # TODO: it is annoying that there are a bunch of ~random non-zero edges that have self-cycles
+                self.prog.AddL2NormCostUsingConicConstraint(A, b, np.append(e.y, e.z))
+                

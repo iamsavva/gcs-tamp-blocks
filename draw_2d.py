@@ -40,6 +40,7 @@ class Draw2DSolution:
         goal,
         fast: bool = True,
         no_arm=False,
+        no_padding=False, 
     ):
         self.no_arm = no_arm
         self.num_modes = num_modes
@@ -49,7 +50,8 @@ class Draw2DSolution:
         self.arm_size = CELL_WIDTH
 
         self.padding = self.block_size / 2
-        self.padding = 0
+        if no_padding:
+            self.padding = 0
         self.border = 20
 
         self.mode = mode_solution
@@ -59,8 +61,8 @@ class Draw2DSolution:
             self.speed = 10  # units/s
             self.grasp_dt = 0.3  # s
         else:
-            self.speed = 1  # units/s
-            self.grasp_dt = 0.7  # s
+            self.speed = 3  # units/s
+            self.grasp_dt = 0.5  # s
 
         self.move_dt = 0.025  # s
 

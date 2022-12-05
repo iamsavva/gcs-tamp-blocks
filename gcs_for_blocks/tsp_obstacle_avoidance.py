@@ -270,28 +270,33 @@ class BlockMovingObstacleAvoidance:
         poses = []
         modes = []
 
-        def add_me(pose):
+        def add_me(pose, mode):
             p = pose.copy()
             p.resize(p.size)
             # if mode not in ("start", "target"):
             #     mode = str(int(mode)+1)
             poses.append(p)
-            modes.append(0)
+            modes.append(mode)
 
         i = 0
+        m = '0'
         while i < len(v_path):
-            try:
-                print(v_path[i].block_index, self.solution.GetSolution(v_path[i].v))
-            except:
-                pass
+            print(v_path[i].value)
             if v_path[i].value is not None:
                 now_pose[0] = v_path[i].value
+                m = '0'
+                if i+1 < len(v_path) and v_path[i+1].value is None:
+                    m = '1'
             else:
+                m = '1'
                 npq = self.solution.GetSolution(e_path[i].right_pos)
                 now_pose[0] = npq
                 now_pose[v_path[i].block_index + 1] = npq
-            add_me(now_pose)
+            add_me(now_pose, m)
+            if i == 0:
+                add_me(now_pose, m)
             i += 1
+        
         return np.array(poses), modes
 
     def find_path_to_target(self, edges, start):

@@ -161,7 +161,6 @@ def axis_aligned_tesselation(bounding_box: AlignedSet, obstacles: T.List[Aligned
         # add the obstacle
         for box in all_sets:
             if obstacle.intersects_with(box):
-                # TODO: ultimate goal is to drop this, right
                 assert not box.set_is_obstacle, "Shouldn't have intersecting boxes"
                 # if obstacle intersects with some box
                 rem_sets.append(box)

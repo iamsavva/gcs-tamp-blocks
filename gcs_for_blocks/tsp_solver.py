@@ -84,7 +84,7 @@ class TSPasGCS:
         assert name not in self.vertices, "Vertex with name " + name + " already exists"
         self.vertices[name] = Vertex(name, value)
 
-    def add_edge(self, left_name: str, right_name: str, edge_name: str = None, cost:float=None):
+    def add_edge(self, left_name: str, right_name: str, edge_name: str = None, cost: float = None):
         if edge_name is None:
             edge_name = left_name + "_" + right_name
         assert edge_name not in self.edges, "Edge " + edge_name + " already exists"
@@ -121,14 +121,13 @@ class TSPasGCS:
             else:
                 e.set_phi(self.primal_prog.NewBinaryVariables(1, "phi_" + e.name)[0])
 
-        
         # for each edge, add constraints
         for e in self.edges.values():
             # some tricks related to set inclusion
-            order_box = Box(lb=np.array([1]), ub=np.array([self.n-1]), state_dim=1)
+            order_box = Box(lb=np.array([1]), ub=np.array([self.n - 1]), state_dim=1)
             A1, b1 = order_box.get_perspective_hpolyhedron()
 
-            order_box = Box(lb=np.array([2]), ub=np.array([self.n-1]), state_dim=1)
+            order_box = Box(lb=np.array([2]), ub=np.array([self.n - 1]), state_dim=1)
             A2, b2 = order_box.get_perspective_hpolyhedron()
 
             if e.left.name == self.start:
@@ -141,7 +140,7 @@ class TSPasGCS:
                 self.primal_prog.AddLinearConstraint(le(A2 @ np.array([e.y, e.phi]), b2))
 
             if e.right.name == self.target:
-                target_box = Box(lb=np.array([self.n-2]), ub=np.array([self.n-2]), state_dim=1)
+                target_box = Box(lb=np.array([self.n - 2]), ub=np.array([self.n - 2]), state_dim=1)
                 tA, tb = target_box.get_perspective_hpolyhedron()
                 self.primal_prog.AddLinearConstraint(le(tA @ np.array([e.y, e.phi]), tb))
                 self.primal_prog.AddLinearConstraint(le(A2 @ np.array([e.z, e.phi]), b2))
@@ -188,10 +187,14 @@ class TSPasGCS:
                 left_vs.add(v.name)
             else:
                 right_vs.add(v.name)
-        left_pot_sum = (self.n/2) * (self.n/2-1)
-        right_pot_sum = (self.n-1) * self.n / 2 - left_pot_sum
-        self.primal_prog.AddLinearConstraint( sum( [e.z for e in self.edges.values() if e.right.name in left_vs]) == left_pot_sum )
-        self.primal_prog.AddLinearConstraint( sum( [e.z for e in self.edges.values() if e.right.name in right_vs]) == right_pot_sum )
+        left_pot_sum = (self.n / 2) * (self.n / 2 - 1)
+        right_pot_sum = (self.n - 1) * self.n / 2 - left_pot_sum
+        self.primal_prog.AddLinearConstraint(
+            sum([e.z for e in self.edges.values() if e.right.name in left_vs]) == left_pot_sum
+        )
+        self.primal_prog.AddLinearConstraint(
+            sum([e.z for e in self.edges.values() if e.right.name in right_vs]) == right_pot_sum
+        )
 
         # total sum is given; don't need it if i already sum up left/right individually
         # self.primal_prog.AddLinearConstraint( sum( [e.z for e in self.edges.values()]) == (self.n-1)*self.n/2 )
@@ -199,7 +202,6 @@ class TSPasGCS:
 
         # add cost
         self.primal_prog.AddLinearCost(sum([e.phi * e.cost for e in self.edges.values()]))
-    
 
     def solve_primal(self, convex_relaxation=True, verbose=False):
         # build the program
@@ -234,7 +236,7 @@ class TSPasGCS:
         for (name, flow) in flow_vars:
             if flow > 0.01:
                 print(name, flow)
-        
+
         pots = []
         for v in self.vertices.values():
             sum_of_y = [self.primal_solution.GetSolution(self.edges[e].y) for e in v.edges_out]
@@ -242,10 +244,10 @@ class TSPasGCS:
             print(v.name, sum_of_y, sum_of_z)
             sum_of_y = sum([self.primal_solution.GetSolution(self.edges[e].y) for e in v.edges_out])
             sum_of_z = sum([self.primal_solution.GetSolution(self.edges[e].z) for e in v.edges_in])
-            pots.append( (v.name, sum_of_z) )
+            pots.append((v.name, sum_of_z))
 
         # pots = [name for (name, _) in sorted(pots, key = lambda x: x[1])]
-        pots = [x for x in sorted(pots, key = lambda x: x[1])]
+        pots = [x for x in sorted(pots, key=lambda x: x[1])]
         print(pots)
 
         left_vs = set()
@@ -261,14 +263,30 @@ class TSPasGCS:
                 right_vs.add(v.name)
         print(left_vs)
         print(right_vs)
-        print(sum( [self.primal_solution.GetSolution(e.z) for e in self.edges.values() if e.right.name in left_vs]))
-        print(sum( [self.primal_solution.GetSolution(e.z) for e in self.edges.values() if e.right.name in right_vs]))
-        left_pot_sum = (self.n/2) * (self.n/2-1)
-        right_pot_sum = (self.n-1) * self.n / 2 - left_pot_sum
+        print(
+            sum(
+                [
+                    self.primal_solution.GetSolution(e.z)
+                    for e in self.edges.values()
+                    if e.right.name in left_vs
+                ]
+            )
+        )
+        print(
+            sum(
+                [
+                    self.primal_solution.GetSolution(e.z)
+                    for e in self.edges.values()
+                    if e.right.name in right_vs
+                ]
+            )
+        )
+        left_pot_sum = (self.n / 2) * (self.n / 2 - 1)
+        right_pot_sum = (self.n - 1) * self.n / 2 - left_pot_sum
         print(left_pot_sum, right_pot_sum)
 
-        print(sum( [self.primal_solution.GetSolution(e.y) for e in self.edges.values()]))
-        print(sum( [self.primal_solution.GetSolution(e.z) for e in self.edges.values()]))
+        print(sum([self.primal_solution.GetSolution(e.y) for e in self.edges.values()]))
+        print(sum([self.primal_solution.GetSolution(e.z) for e in self.edges.values()]))
 
 
 def build_block_moving_gcs_tsp(
@@ -276,7 +294,7 @@ def build_block_moving_gcs_tsp(
 ) -> TSPasGCS:
     bd = block_dim
     num_objects = num_blocks + 1
-    # check lengths 
+    # check lengths
     assert len(start) == block_dim * num_objects
     assert len(target) == block_dim * num_objects
     # naming

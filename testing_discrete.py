@@ -2,9 +2,9 @@ from gcs_for_blocks.tsp_solver import build_block_moving_gcs_tsp, TSPasGCS
 import numpy as np
 
 
-a = np.array([1,2])
+a = np.array([1, 2])
 b = 3
-print(np.append(a,b))
+print(np.append(a, b))
 
 bd = 1
 nb = 9
@@ -15,8 +15,8 @@ nb = 9
 # start = np.random.uniform(0, 50, nb+1)
 # target = np.random.uniform(0, 50, nb+1)
 
-start = np.array([0.0, 1, 2, 3, 4, 5, 6, 7, 8, 9]) + np.random.normal(0,0.001, nb+1)
-target = np.array([2.0, 2, 4, 5, 6, 7, 30, 9, 11, 12]) + np.random.normal(0,0.001, nb+1)
+start = np.array([0.0, 1, 2, 3, 4, 5, 6, 7, 8, 9]) + np.random.normal(0, 0.001, nb + 1)
+target = np.array([2.0, 2, 4, 5, 6, 7, 30, 9, 11, 12]) + np.random.normal(0, 0.001, nb + 1)
 
 # start = np.array([0.0, 1, 2, 3, 4, 5, 6, 7, 10, 20]) + np.random.normal(0,0.001, nb+1)
 # target = np.array([2.0, 2, 4, 5, 6, 7, 30, 9, 11, 12]) + np.random.normal(0,0.001, nb+1)

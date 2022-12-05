@@ -9,8 +9,18 @@ import numpy as np
 
 bd = 1
 nb = 9
-start = np.array([0.0, 1, 2, 3, 4, 5, 6, 7, 10, 20])
-target = np.array([2.0, 2, 4, 5, 6, 7, 30, 9, 11, 12])
+
+# why do cycles occur?
+# np.random.seed(1)
+# some random seeds break symmetries; figure out what those symmetries are!!!
+# start = np.random.uniform(0, 50, nb+1)
+# target = np.random.uniform(0, 50, nb+1)
+
+start = np.array([0.0, 1, 2, 3, 4, 5, 6, 7, 8, 9]) + np.random.normal(0,0.001, nb+1)
+target = np.array([2.0, 2, 4, 5, 6, 7, 30, 9, 11, 12]) + np.random.normal(0,0.001, nb+1)
+
+# start = np.array([0.0, 1, 2, 3, 4, 5, 6, 7, 10, 20]) + np.random.normal(0,0.001, nb+1)
+# target = np.array([2.0, 2, 4, 5, 6, 7, 30, 9, 11, 12]) + np.random.normal(0,0.001, nb+1)
 
 # nb = 4
 # start = np.array([0.0, 1, 5, 6, 7])
@@ -28,7 +38,7 @@ target = np.array([2.0, 2, 4, 5, 6, 7, 30, 9, 11, 12])
 # np.random.seed(2)
 # start += np.random.normal(0, 0.01, len(start))
 # target += np.random.normal(0, 0.01, len(target))
-convex_relaxation = False
+# convex_relaxation = False
 convex_relaxation = True
 
 

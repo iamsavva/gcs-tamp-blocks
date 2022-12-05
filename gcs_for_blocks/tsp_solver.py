@@ -122,9 +122,9 @@ class TSPasGCS:
                 e.set_phi(self.primal_prog.NewBinaryVariables(1, "phi_" + e.name)[0])
 
         
-        
         # for each edge, add constraints
         for e in self.edges.values():
+            # some tricks related to set inclusion
             order_box = Box(lb=np.array([1]), ub=np.array([self.n-1]), state_dim=1)
             A1, b1 = order_box.get_perspective_hpolyhedron()
 
@@ -149,15 +149,6 @@ class TSPasGCS:
                 self.primal_prog.AddLinearConstraint(le(A1 @ np.array([e.z, e.phi]), b1))
             else:
                 self.primal_prog.AddLinearConstraint(le(A2 @ np.array([e.z, e.phi]), b2))
-
-            # self.primal_prog.AddLinearConstraint(le(A @ np.array([e.z, e.phi]), b))
-
-            # A = np.array([[-(self.n - 1), 1], [-1, 0], [0, 1]])
-            # b = np.array([0, 0, self.n - 1])
-            # # flow and left variable belong to an order increase cone
-            # self.primal_prog.AddLinearConstraint(le(A @ np.array([e.phi, e.y]), b))
-            # # flow and right variable belong to an order increase cone
-            # self.primal_prog.AddLinearConstraint(le(A @ np.array([e.phi, e.z]), b))
 
             # order increase constraint
             self.primal_prog.AddLinearConstraint(e.y + e.phi == e.z)
@@ -185,10 +176,7 @@ class TSPasGCS:
             else:
                 self.primal_prog.AddLinearConstraint(sum_of_y == sum_of_z)
 
-        # expr = self.edges["s2_t2"].phi + self.edges["t2_s4"].phi + self.edges["s4_t4"].phi + self.edges["t4_s3"].phi + self.edges["s3_t3"].phi + self.edges["t3_s2"].phi <= 5
-        # self.primal_prog.AddLinearConstraint(expr)
-
-        # self.primal_prog.AddLinearConstraint( sum( [e.z for e in self.edges.values()]) == (self.n-1)*self.n/2 )
+        # sum of left is sum of even, some of right is sum of odd
         left_vs = set()
         right_vs = set()
         for v in self.vertices.values():
@@ -200,27 +188,20 @@ class TSPasGCS:
                 left_vs.add(v.name)
             else:
                 right_vs.add(v.name)
-        # print(left_vs)
-        # print(right_vs)
         left_pot_sum = (self.n/2) * (self.n/2-1)
         right_pot_sum = (self.n-1) * self.n / 2 - left_pot_sum
-        
-        # print(left_pot_sum, right_pot_sum)
-        # print(sum( [e.z for e in self.edges.values() if e.right.name in left_vs]))
-        
         self.primal_prog.AddLinearConstraint( sum( [e.z for e in self.edges.values() if e.right.name in left_vs]) == left_pot_sum )
         self.primal_prog.AddLinearConstraint( sum( [e.z for e in self.edges.values() if e.right.name in right_vs]) == right_pot_sum )
 
-        self.primal_prog.AddLinearConstraint( sum( [e.z for e in self.edges.values()]) == (self.n-1)*self.n/2 )
-        self.primal_prog.AddLinearConstraint( sum( [e.y for e in self.edges.values()]) == (self.n-2)*(self.n-1)/2 )
+        # total sum is given; don't need it if i already sum up left/right individually
+        # self.primal_prog.AddLinearConstraint( sum( [e.z for e in self.edges.values()]) == (self.n-1)*self.n/2 )
+        # self.primal_prog.AddLinearConstraint( sum( [e.y for e in self.edges.values()]) == (self.n-2)*(self.n-1)/2 )
 
         # add cost
         self.primal_prog.AddLinearCost(sum([e.phi * e.cost for e in self.edges.values()]))
-        
-        # self.primal_prog.AddQuadraticCost(sum([(e.z) * (0.1) for e in self.edges.values()]))
     
 
-    def solve_primal(self, convex_relaxation=True):
+    def solve_primal(self, convex_relaxation=True, verbose=False):
         # build the program
         x = timeit()
         self.build_primal_optimization_program(convex_relaxation)
@@ -241,10 +222,14 @@ class TSPasGCS:
         flows = [self.primal_solution.GetSolution(e.phi) for e in self.edges.values()]
         not_tight = np.any(np.logical_and(0.01 < np.array(flows), np.array(flows) < 0.99))
         if not_tight:
-            WARN("SOLUTION NOT TIGHT")
+            WARN("CONVEX RELAXATION NOT TIGHT")
         else:
-            YAY("SOLUTION IS TIGHT")
+            YAY("CONVEX RELAXATION IS TIGHT")
 
+        if verbose:
+            self.verbose_solution()
+
+    def verbose_solution(self):
         flow_vars = [(e.name, self.primal_solution.GetSolution(e.phi)) for e in self.edges.values()]
         for (name, flow) in flow_vars:
             if flow > 0.01:
@@ -252,43 +237,38 @@ class TSPasGCS:
         
         pots = []
         for v in self.vertices.values():
-            # sum of ys = sum of zs
-            # print(v.name)
             sum_of_y = [self.primal_solution.GetSolution(self.edges[e].y) for e in v.edges_out]
             sum_of_z = [self.primal_solution.GetSolution(self.edges[e].z) for e in v.edges_in]
             print(v.name, sum_of_y, sum_of_z)
             sum_of_y = sum([self.primal_solution.GetSolution(self.edges[e].y) for e in v.edges_out])
             sum_of_z = sum([self.primal_solution.GetSolution(self.edges[e].z) for e in v.edges_in])
             pots.append( (v.name, sum_of_z) )
+
         # pots = [name for (name, _) in sorted(pots, key = lambda x: x[1])]
         pots = [x for x in sorted(pots, key = lambda x: x[1])]
         print(pots)
 
-        # left_vs = set()
-        # right_vs = set()
-        # for v in self.vertices.values():
-        #     if v.name == "s0":
-        #         left_vs.add(v.name)
-        #     elif v.name == "t0":
-        #         right_vs.add(v.name)
-        #     elif v.name[0] == "t":
-        #         left_vs.add(v.name)
-        #     else:
-        #         right_vs.add(v.name)
-        # print(left_vs)
-        # print(right_vs)
-        # print(sum( [self.primal_solution.GetSolution(e.z) for e in self.edges.values() if e.right.name in left_vs]))
-        # print(sum( [self.primal_solution.GetSolution(e.z) for e in self.edges.values() if e.right.name in right_vs]))
-        # left_pot_sum = (self.n/2) * (self.n/2-1)
-        # right_pot_sum = (self.n-1) * self.n / 2 - left_pot_sum
-        # print(left_pot_sum, right_pot_sum)
+        left_vs = set()
+        right_vs = set()
+        for v in self.vertices.values():
+            if v.name == "s0":
+                left_vs.add(v.name)
+            elif v.name == "t0":
+                right_vs.add(v.name)
+            elif v.name[0] == "t":
+                left_vs.add(v.name)
+            else:
+                right_vs.add(v.name)
+        print(left_vs)
+        print(right_vs)
+        print(sum( [self.primal_solution.GetSolution(e.z) for e in self.edges.values() if e.right.name in left_vs]))
+        print(sum( [self.primal_solution.GetSolution(e.z) for e in self.edges.values() if e.right.name in right_vs]))
+        left_pot_sum = (self.n/2) * (self.n/2-1)
+        right_pot_sum = (self.n-1) * self.n / 2 - left_pot_sum
+        print(left_pot_sum, right_pot_sum)
 
-
-
-        
-
-        # print(sum( [self.primal_solution.GetSolution(e.y) for e in self.edges.values()]))
-        # print(sum( [self.primal_solution.GetSolution(e.z) for e in self.edges.values()]))
+        print(sum( [self.primal_solution.GetSolution(e.y) for e in self.edges.values()]))
+        print(sum( [self.primal_solution.GetSolution(e.z) for e in self.edges.values()]))
 
 
 def build_block_moving_gcs_tsp(

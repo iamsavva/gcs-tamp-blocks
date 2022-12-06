@@ -18,7 +18,7 @@ def make_simple_obstacle_swap_two_in_out(
 ) -> T.Tuple[GCSforBlocksOneInOneOut, npt.NDArray, T.List]:
     INFO("--------------------------")
     INFO("Test case: 2D, Obstacles, 2 blocks IN OUT\n")
-    options = GCSforBlocksOptions(num_blocks=2, block_dim=2, horizon=10, lbf=0, ubf=2)
+    options = GCSforBlocksOptions(num_blocks=2, block_dim=2, horizon=3, lbf=0, ubf=2)
     options.problem_complexity = "obstacles"
     options.use_convex_relaxation = use_convex_relaxation
     options.max_rounded_paths = max_rounded_paths
@@ -46,7 +46,7 @@ def make_simple_obstacle_swap_two(
 ) -> T.Tuple[GCSforBlocks, npt.NDArray, T.List]:
     INFO("--------------------------")
     INFO("Test case: 2D, Obstacles, 2 blocks; MICP:", not use_convex_relaxation, "\n")
-    options = GCSforBlocksOptions(num_blocks=2, block_dim=2, horizon=9, lbf=0, ubf=2)
+    options = GCSforBlocksOptions(num_blocks=2, block_dim=2, horizon=7, lbf=0, ubf=2)
     options.problem_complexity = "obstacles"
     options.use_convex_relaxation = use_convex_relaxation
     options.max_rounded_paths = max_rounded_paths

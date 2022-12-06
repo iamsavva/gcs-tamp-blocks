@@ -89,7 +89,7 @@ class AlignedSet:
 
     def intersects_with(self, other):
         if self.r <= other.l or other.r <= self.l or self.a <= other.b or other.a <= self.b:
-        # if self.r < other.l or other.r < self.l or self.a < other.b or other.a < self.b:
+            # if self.r < other.l or other.r < self.l or self.a < other.b or other.a < self.b:
             return False
         return True
 

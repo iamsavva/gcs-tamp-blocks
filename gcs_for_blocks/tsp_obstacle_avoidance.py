@@ -42,7 +42,7 @@ class BlockMovingObstacleAvoidance:
             self.start_block_pos, self.target_block_pos, block_width, self.bounding_box
         )
         # make a tesselation
-        self.convex_sets = axis_aligned_tesselation(bounding_box.copy(), obstacles)
+        self.convex_set_tesselation = axis_aligned_tesselation(bounding_box.copy(), obstacles)
         self.convex_relaxation = convex_relaxation
         self.prog = MathematicalProgram()
         self.solution = None
@@ -237,7 +237,7 @@ class BlockMovingObstacleAvoidance:
                 self.bounding_box.copy(),
                 self.start_block_pos,
                 self.target_block_pos,
-                self.convex_sets,
+                self.convex_set_tesselation,
                 block_index,
                 self.convex_relaxation,
             )
@@ -266,37 +266,40 @@ class BlockMovingObstacleAvoidance:
         v_path, e_path = self.find_path_to_target(non_zero_edges, self.vertices[self.start])
 
         now_pose = self.start_pos.copy()
-        now_mode = "start"
-        poses = []
-        modes = []
+        poses, modes = [], []
 
         def add_me(pose, mode):
             p = pose.copy()
             p.resize(p.size)
-            # if mode not in ("start", "target"):
-            #     mode = str(int(mode)+1)
             poses.append(p)
             modes.append(mode)
 
         i = 0
-        m = '0'
+        m = "0"
         while i < len(v_path):
             print(v_path[i].value)
+            try:
+                print(
+                    self.solution.GetSolution(e_path[i].left_pos),
+                    self.solution.GetSolution(e_path[i].right_pos),
+                )
+            except:
+                # oi
+                qwertq = 123
             if v_path[i].value is not None:
                 now_pose[0] = v_path[i].value
-                m = '0'
-                if i+1 < len(v_path) and v_path[i+1].value is None:
-                    m = '1'
+                m = "0"
+                if i + 1 < len(v_path) and v_path[i + 1].value is None:
+                    m = "1"
             else:
-                m = '1'
-                npq = self.solution.GetSolution(e_path[i].right_pos)
-                now_pose[0] = npq
-                now_pose[v_path[i].block_index + 1] = npq
+                m = "1"
+                now_pose[0] = self.solution.GetSolution(e_path[i].right_pos)
+                now_pose[v_path[i].block_index + 1] = now_pose[0]
             add_me(now_pose, m)
             if i == 0:
                 add_me(now_pose, m)
             i += 1
-        
+
         return np.array(poses), modes
 
     def find_path_to_target(self, edges, start):

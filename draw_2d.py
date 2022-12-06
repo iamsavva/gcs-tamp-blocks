@@ -40,7 +40,7 @@ class Draw2DSolution:
         goal,
         fast: bool = True,
         no_arm=False,
-        no_padding=False, 
+        no_padding=False,
     ):
         self.no_arm = no_arm
         self.num_modes = num_modes
@@ -58,7 +58,7 @@ class Draw2DSolution:
         self.vertex = vertex_solution
 
         if fast:
-            self.speed = 10  # units/s
+            self.speed = 8  # units/s
             self.grasp_dt = 0.3  # s
         else:
             self.speed = 3  # units/s
@@ -279,27 +279,27 @@ class Draw2DSolution:
 
 
 if __name__ == "__main__":
-    # gcs, ub, goal = make_simple_obstacle_swap_two()
+    gcs, ub, goal = make_simple_obstacle_swap_two()
     # gcs, ub, goal = make_simple_obstacle_swap_two_in_out()
 
     # gcs, ub, goal = make_simple_transparent_gcs_test(2, 7, 18)
 
     # gcs, ub, goal = make_simple_transparent_gcs_test(2,10,21, use_convex_relaxation=False, display_graph=False, max_rounded_paths=0, add_grasp_cost = False)
 
-    nb = 2
-    h = 7
-    seed = 5
-    gcs, ub, goal = make_simple_transparent_gcs_test(
-        2,
-        nb,
-        h,
-        use_convex_relaxation=False,
-        display_graph=False,
-        max_rounded_paths=0,
-        add_grasp_cost=False,
-        randomize=False,
-        seed=seed,
-    )
+    # nb = 2
+    # h = 7
+    # seed = 5
+    # gcs, ub, goal = make_simple_transparent_gcs_test(
+    #     2,
+    #     nb,
+    #     h,
+    #     use_convex_relaxation=False,
+    #     display_graph=False,
+    #     max_rounded_paths=0,
+    #     add_grasp_cost=False,
+    #     randomize=False,
+    #     seed=seed,
+    # )
 
     assert gcs.solution.is_success(), "Solution was not found"
     modes, vertices = gcs.get_solution_path()

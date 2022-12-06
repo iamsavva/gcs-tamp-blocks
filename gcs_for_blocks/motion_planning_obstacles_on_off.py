@@ -73,13 +73,17 @@ class MotionPlanning:
         self.add_mp_constraints_to_prog()
         self.add_mp_costs_to_prog()
 
-    def add_vertex(self, name: str, value=None) -> None:
+    def add_vertex(self, aligned_set: AlignedSet) -> None:
         """
         Add a new vertex to both full vertex set and local vertex set.
+        Note that this implementation differs from TSP -- bc obstacles.
         """
+        name = aligned_set.name
         assert name not in self.vertices, "Vertex with name " + name + " already exists"
         assert name not in self.all_vertices, "Vertex with name " + name + " already exists in og"
-        self.all_vertices[name] = Vertex(name, value, block_index=self.moving_block_index)
+        self.all_vertices[name] = Vertex(name, block_index=self.moving_block_index)
+        if len(aligned_set.obstacles) > 0:
+            self.all_vertices[name].set_obstacles(aligned_set.obstacles)
         self.vertices[name] = self.all_vertices[name]
 
     def add_edge(self, left_name: str, right_name: str) -> None:
@@ -101,13 +105,13 @@ class MotionPlanning:
         Graph structure: add motion planning vertices and edges.
         """
         ############################
-        # tsp start/target should already be here
+        # tsp start/target should already be in vertices
         assert self.start_tsp in self.vertices
         assert self.target_tsp in self.vertices
 
         # add mp vertices
         for aligned_set in self.convex_set_tesselation.values():
-            self.add_vertex(aligned_set.name)
+            self.add_vertex(aligned_set)
 
         ############################
         # add all edges
@@ -211,22 +215,45 @@ class MotionPlanning:
             # NOTE: i am not adding these constraints on edge into self.target_tsp
             # such constraint is redundant because there is unique edge into target_tsp
 
-            # turning obstacles on and off
+            ###################################
+            # turning obstacles on and off: don't allow to enter set if it's an obstacle
             # flow and visitaiton of that obstacle must belong to a particular set
-            if e.left.name != self.start_tsp and e.right.name[0] == "s":
-                # edge goes into a start obstacle
-                obstacle_num = int(e.right.name[1:-4])
-                x = np.array([self.vertices[self.start_tsp].v[obstacle_num], e.phi])
-                A = np.array([[1, 0], [0, -1], [-1, 1]])
-                b = np.array([1, 0, 0])
-                self.prog.AddLinearConstraint(le(A @ x, b))
-            if e.right.name != self.target_tsp and e.right.name[0] == "t":
-                # edge goes into a target obstacle
-                obstacle_num = int(e.right.name[1:-4])
-                x = np.array([self.vertices[self.start_tsp].v[obstacle_num], e.phi])
-                A = np.array([[-1, 0], [0, -1], [1, 1]])
-                b = np.array([0, 0, 1])
-                self.prog.AddLinearConstraint(le(A @ x, b))
+            # if this is part of obstacles
+            if e.right.obstacles is not None:
+                # for each obstacle it's part of
+                for (obst_type, obstacle_num) in e.right.obstacles:
+                    # don't make our start/target mp vertices into an obstacle!
+                    if e.right.name == self.start_mp and obst_type == "s":
+                        continue
+                    if e.right.name == self.target_mp and obst_type == "t":
+                        continue
+                    # [visitation of i , flow into i] must belong to a particular set given by A, b
+                    x = np.array([self.vertices[self.start_tsp].v[obstacle_num], e.phi])
+                    if obst_type == "s":
+                        A = np.array([[1, 0], [0, -1], [-1, 1]])
+                        b = np.array([1, 0, 0])
+                    elif obst_type == "t":
+                        A = np.array([[-1, 0], [0, -1], [1, 1]])
+                        b = np.array([0, 0, 1])
+                    else:
+                        raise Exception("non start-target obstacle?")
+                    self.prog.AddLinearConstraint(le(A @ x, b))
+
+            # if e.left.name != self.start_tsp and e.right.name[0] == "s":
+            #     # edge goes into a start obstacle
+            #     obstacle_num = int(e.right.name[1:-4])
+            #     x = np.array([self.vertices[self.start_tsp].v[obstacle_num], e.phi])
+            #     A = np.array([[1, 0], [0, -1], [-1, 1]])
+            #     b = np.array([1, 0, 0])
+            #     self.prog.AddLinearConstraint(le(A @ x, b))
+            # # TODO: change this if statement
+            # if e.right.name != self.target_tsp and e.right.name[0] == "t":
+            #     # edge goes into a target obstacle
+            #     obstacle_num = int(e.right.name[1:-4])
+            #     x = np.array([self.vertices[self.start_tsp].v[obstacle_num], e.phi])
+            #     A = np.array([[-1, 0], [0, -1], [1, 1]])
+            #     b = np.array([0, 0, 1])
+            #     self.prog.AddLinearConstraint(le(A @ x, b))
 
     def add_mp_costs_to_prog(self) -> None:
         """

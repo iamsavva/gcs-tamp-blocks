@@ -22,6 +22,11 @@ class Vertex:
         self.v = None
         self.order = None
 
+        self.obstacles = None
+
+    def set_obstacles(self, obstacles):
+        self.obstacles = obstacles
+
     def set_block_index(self, block_index: int):
         assert self.block_index is None, "Block index for " + self.name + " is already set"
         self.block_index = block_index

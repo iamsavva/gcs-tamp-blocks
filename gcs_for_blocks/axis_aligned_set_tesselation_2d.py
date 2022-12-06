@@ -41,7 +41,7 @@ class AlignedSet:
     """
     A class that defines a 2D axis aligned set and relevant tools.
     """
-    def __init__(self, a:float, b:float, l:float, r:float, name:str="")->None:
+    def __init__(self, a:float, b:float, l:float, r:float, name:str="", obstacles:T.List[T.Tuple[str,int]]=[])->None:
         # above bound a, y <= a
         # below bound b, b <= y
         # left  bound l, l <= x
@@ -49,6 +49,7 @@ class AlignedSet:
         self.constraints = {"a": a, "b": b, "l": l, "r": r}  # type: T.Dict[str, float]
         self.name = name  # type: str
         self.box = Box(lb=np.array([l, b]), ub=np.array([r, a]), state_dim=2) # type: Box
+        self.obstacles = obstacles
 
     @property
     def l(self)->float:
@@ -85,7 +86,7 @@ class AlignedSet:
         return self.name != ""
 
     def copy(self)->"AlignedSet":
-        return AlignedSet(a=self.a, b=self.b, l=self.l, r=self.r, name=self.name)
+        return AlignedSet(a=self.a, b=self.b, l=self.l, r=self.r, name=self.name, obstacles=self.obstacles)
 
     def intersects_with(self, other)->bool:
         # TODO: again,equality constraints man
@@ -210,12 +211,13 @@ def locations_to_aligned_sets(start, target, block_width, bounding_box):
         obst = AlignedSet(l=x - bw, r=x + bw, b=y - bw, a=y + bw, name="s" + str(i))
         nobst = obst.intersection(bounding_box)
         nobst.name = "s" + str(i)
+        nobst.obstacles = [("s", i)]
         sets.append(nobst)
-        # sets.append(AlignedSet(l=x - bw, r=x + bw, b=y - bw, a=y + bw, name="s" + str(i)))
     for i, (x, y) in enumerate(target):
         obst = AlignedSet(l=x - bw, r=x + bw, b=y - bw, a=y + bw, name="t" + str(i))
         nobst = obst.intersection(bounding_box)
         nobst.name = "t" + str(i)
+        nobst.obstacles = [("t", i)]
         sets.append(nobst)
         # sets.append(AlignedSet(l=x - bw, r=x + bw, b=y - bw, a=y + bw, name="t" + str(i)))
     return sets

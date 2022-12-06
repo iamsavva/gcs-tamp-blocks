@@ -3,13 +3,13 @@ import typing as T
 import numpy as np
 import numpy.typing as npt
 
-from pydrake.solvers import ( # pylint: disable=import-error, no-name-in-module
+from pydrake.solvers import (  # pylint: disable=import-error, no-name-in-module
     MathematicalProgram,
     Solve,
 )
 from pydrake.math import le, eq  # pylint: disable=import-error, no-name-in-module
 
-from .util import timeit, INFO, WARN, ERROR, YAY
+from .util import timeit, WARN, ERROR, YAY # INFO
 from .axis_aligned_set_tesselation_2d import (
     Box,
     AlignedSet,
@@ -17,7 +17,7 @@ from .axis_aligned_set_tesselation_2d import (
     locations_to_aligned_sets,
     get_obstacle_to_set_mapping,
 )
-from .tsp_solver import Vertex, Edge
+from .tsp_vertex_edge import Vertex, Edge
 from .motion_planning_obstacles_on_off import MotionPlanning
 
 
@@ -56,7 +56,9 @@ class BlockMovingObstacleAvoidance:
             self.start_block_pos, self.target_block_pos, block_width, self.bounding_box
         )
         self.convex_set_tesselation = axis_aligned_tesselation(bounding_box.copy(), obstacles)
-        self.obstacle_to_set = get_obstacle_to_set_mapping(self.start_block_pos, self.target_block_pos, self.convex_set_tesselation)
+        self.obstacle_to_set = get_obstacle_to_set_mapping(
+            self.start_block_pos, self.target_block_pos, self.convex_set_tesselation
+        )
         self.share_edge_tol = share_edge_tol
         # init the program
         self.vertices = dict()  # type: T.Dict[str, Vertex]
@@ -303,17 +305,16 @@ class BlockMovingObstacleAvoidance:
         """
         for block_index in range(self.num_blocks):
             MotionPlanning(
-                prog = self.prog,
-                all_vertices = self.vertices,
-                all_edges = self.edges,
-                bounding_box = self.bounding_box.copy(),
-                start_block_pos = self.start_block_pos,
-                target_block_pos = self.target_block_pos,
-                convex_set_tesselation = self.convex_set_tesselation,
-                obstacle_to_set = self.obstacle_to_set,
-                moving_block_index = block_index,
-                convex_relaxation = self.convex_relaxation,
-                share_edge_tol = self.share_edge_tol
+                prog=self.prog,
+                all_vertices=self.vertices,
+                all_edges=self.edges,
+                start_block_pos=self.start_block_pos,
+                target_block_pos=self.target_block_pos,
+                convex_set_tesselation=self.convex_set_tesselation,
+                obstacle_to_set=self.obstacle_to_set,
+                moving_block_index=block_index,
+                convex_relaxation=self.convex_relaxation,
+                share_edge_tol=self.share_edge_tol,
             )
 
     def solve(self):

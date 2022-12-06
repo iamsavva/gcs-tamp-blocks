@@ -10,7 +10,7 @@ from pydrake.math import le, eq  # pylint: disable=import-error, no-name-in-modu
 from .axis_aligned_set_tesselation_2d import (
     AlignedSet,
 )
-from .tsp_solver import Vertex, Edge
+from .tsp_vertex_edge import Vertex, Edge
 
 
 class MotionPlanning:
@@ -30,14 +30,13 @@ class MotionPlanning:
         prog: MathematicalProgram,  # overall MICP
         all_vertices: T.Dict[str, Vertex],  # vertices from overall MICP
         all_edges: T.Dict[str, Edge],  # edges from overall MICP
-        bounding_box: AlignedSet,  # bounding box that defines the set over which we operate
         start_block_pos: T.List[T.Tuple[float, float]],  # n start positions
         target_block_pos: T.List[T.Tuple[float, float]],  # n target positions
         convex_set_tesselation: T.Dict[str, AlignedSet],  # space tesselation
-        obstacle_to_set: T.Dict[str, str],
+        obstacle_to_set: T.Dict[str, str],  # mapping of obstacle s/t [i] to a set name
         moving_block_index: int,  # index of the blocks we are moving right now
         convex_relaxation: bool = False,  # whether flows are integer or not
-        share_edge_tol: float = 0.000001
+        share_edge_tol: float = 0.000001,  # tolerance for whether two aligned sets have a common edge
     ) -> None:
         self.num_blocks = len(start_block_pos)  # type: int
         self.moving_block_index = moving_block_index  # type: int
@@ -47,12 +46,9 @@ class MotionPlanning:
         smbi = str(self.moving_block_index)  # type: str
         self.start_tsp = "s" + smbi + "_tsp"  # type: str
         self.target_tsp = "t" + smbi + "_tsp"  # type: str
-        self.start_mp = self.mp_name(obstacle_to_set["s" + smbi])# type: str
+        self.start_mp = self.mp_name(obstacle_to_set["s" + smbi])  # type: str
         self.target_mp = self.mp_name(obstacle_to_set["t" + smbi])  # type: str
-
-        self.bounding_box = bounding_box
         # rename the sets in the convex set tesselation
-        self.obstacle_to_set = obstacle_to_set
         self.convex_set_tesselation = dict()
         for name in convex_set_tesselation:
             new_name = self.mp_name(name)
@@ -62,7 +58,7 @@ class MotionPlanning:
 
         self.prog = prog  # type: MathematicalProgram
         self.convex_relaxation = convex_relaxation  # type: bool
-        self.share_edge_tol = share_edge_tol # type: float
+        self.share_edge_tol = share_edge_tol  # type: float
         # vertecis of the entire program
         self.all_vertices = all_vertices
         self.all_edges = all_edges
@@ -125,7 +121,6 @@ class MotionPlanning:
         # add edge from between tsp portion and mp portion
         self.add_edge(self.start_tsp, self.start_mp)
         self.add_edge(self.target_mp, self.target_tsp)
-        # TODO: fix me
         # add all edges within the mp portion
         for set1 in self.convex_set_tesselation.values():
             for set2 in self.convex_set_tesselation.values():

@@ -1,3 +1,13 @@
+import numpy as np
+
+from pydrake.solvers import (
+    MathematicalProgram,
+    Solve,
+)  # pylint: disable=import-error, no-name-in-module
+from pydrake.math import le, eq  # pylint: disable=import-error, no-name-in-module
+from gcs_for_blocks.tsp_solver import Vertex, Edge
+from gcs_for_blocks.util import timeit, INFO, WARN, ERROR, YAY
+from gcs_for_blocks.tsp_obstacle_avoidance import BlockMovingObstacleAvoidance
 from gcs_for_blocks.motion_planning_obstacles_on_off import MotionPlanning
 from gcs_for_blocks.axis_aligned_set_tesselation_2d import (
     Box,
@@ -6,13 +16,6 @@ from gcs_for_blocks.axis_aligned_set_tesselation_2d import (
     locations_to_aligned_sets,
     axis_aligned_tesselation,
 )
-import numpy as np
-
-from pydrake.solvers import MathematicalProgram, Solve
-from pydrake.math import le, eq
-from gcs_for_blocks.tsp_solver import Vertex, Edge
-from gcs_for_blocks.util import timeit, INFO, WARN, ERROR, YAY
-from gcs_for_blocks.tsp_obstacle_avoidance import BlockMovingObstacleAvoidance
 from draw_2d import Draw2DSolution
 
 bounding_box = AlignedSet(b=0, a=6, l=0, r=7)
@@ -64,5 +67,7 @@ poses, modes = prog.get_drawing_stuff()
 
 tpose = prog.target_pos.copy()
 tpose.resize(tpose.size)
-drawer = Draw2DSolution(prog.num_blocks + 1, ub, modes, poses, tpose, fast=fast, no_arm=False, no_padding=True)  # type: ignore
+drawer = Draw2DSolution(
+    prog.num_blocks + 1, ub, modes, poses, tpose, fast=fast, no_arm=False, no_padding=True
+)
 drawer.draw_solution()

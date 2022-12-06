@@ -11,14 +11,14 @@ import time
 
 # from PIL import Image as PIL_Image
 
-import pydrake.geometry.optimization as opt  # pylint: disable=import-error
-from pydrake.geometry.optimization import (  # pylint: disable=import-error
+import pydrake.geometry.optimization as opt  # pylint: disable=import-error, no-name-in-module
+from pydrake.geometry.optimization import (  # pylint: disable=import-error, no-name-in-module
     Point,
     GraphOfConvexSets,
     HPolyhedron,
     ConvexSet,
 )
-from pydrake.solvers import (  # pylint: disable=import-error, unused-import
+from pydrake.solvers import (  # pylint: disable=import-error, no-name-in-module, unused-import
     Binding,
     L2NormCost,
     LinearConstraint,

@@ -3,10 +3,10 @@ import typing as T
 import numpy as np
 import numpy.typing as npt
 
-# from .util import timeit, INFO, WARN, ERROR, YAY
-from pydrake.solvers import MathematicalProgram
-from pydrake.math import le, eq
+from pydrake.solvers import MathematicalProgram  # pylint: disable=import-error, no-name-in-module
+from pydrake.math import le, eq  # pylint: disable=import-error, no-name-in-module
 
+# from .util import timeit, INFO, WARN, ERROR, YAY
 from .axis_aligned_set_tesselation_2d import (
     AlignedSet,
 )
@@ -36,7 +36,7 @@ class MotionPlanning:
         convex_set_tesselation: T.Dict[str, AlignedSet],  # space tesselation
         moving_block_index: int,  # index of the blocks we are moving right now
         convex_relaxation: bool = False,  # whether flows are integer or not
-    ):
+    ) -> None:
         self.num_blocks = len(start_block_pos)  # type: int
         self.moving_block_index = moving_block_index  # type: int
         self.start_block_pos = [np.array(x) for x in start_block_pos]  # type: T.List[npt.NDArray]
@@ -63,8 +63,8 @@ class MotionPlanning:
         self.all_vertices = all_vertices
         self.all_edges = all_edges
         # specifically motion-planning-relevant vertices
-        self.vertices = dict()
-        self.edges = dict()
+        self.vertices = dict()  # type: T.Dict[str, Vertex]
+        self.edges = dict()  # type: T.Dict[str, Edge]
         self.vertices[self.start_tsp] = self.all_vertices[self.start_tsp]
         self.vertices[self.target_tsp] = self.all_vertices[self.target_tsp]
 
@@ -73,7 +73,7 @@ class MotionPlanning:
         self.add_mp_constraints_to_prog()
         self.add_mp_costs_to_prog()
 
-    def add_vertex(self, name: str, value=None):
+    def add_vertex(self, name: str, value=None) -> None:
         """
         Add a new vertex to both full vertex set and local vertex set.
         """
@@ -82,7 +82,7 @@ class MotionPlanning:
         self.all_vertices[name] = Vertex(name, value, block_index=self.moving_block_index)
         self.vertices[name] = self.all_vertices[name]
 
-    def add_edge(self, left_name: str, right_name: str):
+    def add_edge(self, left_name: str, right_name: str) -> None:
         """
         Add a new edge to both full edge set and local edge set.
         """
@@ -96,7 +96,7 @@ class MotionPlanning:
         self.all_vertices[left_name].add_edge_out(edge_name)
         self.all_vertices[right_name].add_edge_in(edge_name)
 
-    def add_mp_vertices_and_edges(self):
+    def add_mp_vertices_and_edges(self) -> None:
         """
         Graph structure: add motion planning vertices and edges.
         """
@@ -122,7 +122,7 @@ class MotionPlanning:
                     # add edge between set1 and set2
                     self.add_edge(set1.name, set2.name)
 
-    def add_mp_variables_to_prog(self):
+    def add_mp_variables_to_prog(self) -> None:
         """
         Program variables -- add variables on the edges -- flows and position.
         """
@@ -142,7 +142,7 @@ class MotionPlanning:
                 e.set_left_pos(self.prog.NewContinuousVariables(2, "left_pos_" + e.name))
                 e.set_right_pos(self.prog.NewContinuousVariables(2, "right_pos_" + e.name))
 
-    def add_mp_constraints_to_prog(self):
+    def add_mp_constraints_to_prog(self) -> None:
         """
         Motion planning constraints -- good old motion planning GCS, with some tricks for turning
         obstacles on and off.
@@ -228,7 +228,10 @@ class MotionPlanning:
                 b = np.array([0, 0, 1])
                 self.prog.AddLinearConstraint(le(A @ x, b))
 
-    def add_mp_costs_to_prog(self):
+    def add_mp_costs_to_prog(self) -> None:
+        """
+        Motion planning costs: L2 norm over travelled distance, defined as a SOC constraint.
+        """
         ###################################
         # PER EDGE
         # L2 norm over travelled distance, defined as a SOC constraint

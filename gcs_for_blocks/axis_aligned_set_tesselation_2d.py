@@ -74,16 +74,11 @@ class AlignedSet:
             return False
         return True
 
-    # @property
-    # def set_is_non_empty(self):
-    #     if self.l >= self.r or self.a <= self.b:
-    #         return False
-    #     return True
-
-    @property
-    def set_is_obstacle(self)->bool: 
-        # TODO: remove this altogether? check for intersecting boxes elsewhere
-        return self.name != ""
+    def offset_in(self, delta):
+        self.constraints["l"] = self.l + delta
+        self.constraints["r"] = self.r - delta
+        self.constraints["b"] = self.b + delta
+        self.constraints["a"] = self.a - delta
 
     def copy(self)->"AlignedSet":
         return AlignedSet(a=self.a, b=self.b, l=self.l, r=self.r, name=self.name, obstacles=self.obstacles)
@@ -91,19 +86,23 @@ class AlignedSet:
     def intersects_with(self, other)->bool:
         # TODO: again,equality constraints man
         # strictly right of, strictly left of, strictly above, strictly below
+        # this intersection is such that there is interior
         if self.r <= other.l or other.r <= self.l or self.a <= other.b or other.a <= self.b:
             # if self.r < other.l or other.r < self.l or self.a < other.b or other.a < self.b:
             return False
         return True
 
-    def share_edge(self, other:"AlignedSet")->bool:
+    def point_is_in_set(self, point):
+        return self.l <= point[0] <= self.r and self.b <= point[1] <= self.a
+
+    def share_edge(self, other:"AlignedSet", rtol = 0.000001)->bool:
         """
         Two sets share an edge if they intersect
             + left of one is right of another  or  below of one is above of another.
         """
         b, a = max(self.b, other.b), min(self.a, other.a)
         l, r = max(self.l, other.l), min(self.r, other.r)
-        if ((a - b) > 0 and np.isclose(l, r)) or ((r - l) > 0 and np.isclose(b, a)):
+        if ((a - b) > 0 and np.isclose(l, r, rtol)) or ((r - l) > 0 and np.isclose(b, a, rtol)):
             return True
         return False
 
@@ -136,6 +135,8 @@ class AlignedSet:
         dir_sets.append(AlignedSet(r=bounding_box.r, l=bounding_box.l, a=self.b, b=bounding_box.b))
         # above
         dir_sets.append(AlignedSet(r=bounding_box.r, l=bounding_box.l, b=self.a, a=bounding_box.a))
+        # itself
+        dir_sets.append(self.copy())
         return dir_sets
 
     def get_rectangle(self, color: str):
@@ -157,82 +158,105 @@ class AlignedSet:
         # Ax <= b phi
         return self.box.get_perspective_hpolyhedron()
 
-
 def axis_aligned_tesselation(bounding_box: AlignedSet, obstacles: T.List[AlignedSet]):
-    all_sets = set()  # type: T.Set[AlignedSet]
-    all_sets.add(bounding_box)
-    temp_box_index = 0
+    # initialize the tesselation with the bounding box
+    tesselation = set()  # type: T.Set[AlignedSet]
+    tesselation.add(bounding_box)
+    # for each obstacle that i need to add
     for obstacle in obstacles:
         new_sets = []
         rem_sets = []
-        # add the obstacle
-        for box in all_sets:
+        # for each box that's already in the tesselation
+        for box in tesselation:
+            # if obstacle intersects with some box
             if obstacle.intersects_with(box):
-                assert not box.set_is_obstacle, "Shouldn't have intersecting boxes"
-                # if obstacle intersects with some box
+                # remove that box
                 rem_sets.append(box)
+                # get 5 direction sets for the obstacle
                 direction_sets_for_obstacle = obstacle.get_direction_sets(bounding_box)
-                # add all LRAB intersections
+                # add their intersections
+                # TODO: add here the bit no-iterior intersections
                 for dir_set in direction_sets_for_obstacle:
                     if box.intersects_with(dir_set):
-                        new_sets.append(box.intersection(dir_set))
-                        temp_box_index += 1
+                        intersection_set = box.intersection(dir_set)
+                        intersection_set.obstacles = box.obstacles + dir_set.obstacles
+                        new_sets.append(intersection_set)
 
-        new_sets.append(obstacle)
+        # new_sets.append(obstacle)
         for add_me in new_sets:
-            all_sets.add(add_me)
+            tesselation.add(add_me)
         for rem in rem_sets:
-            all_sets.remove(rem)
+            tesselation.remove(rem)
 
-    all_sets = list(all_sets)
+    tesselation = list(tesselation)
 
     # index the boxes
-    all_sets_dict = dict()
+    tesselation_dict = dict()
     index = 0
-    for s in all_sets:
-        if not s.set_is_obstacle:
-            s.name = "r" + str(index)
-            index += 1
-        all_sets_dict[s.name] = s
+    for s in tesselation:
+        # if not s.set_is_obstacle:
+        s.name = "r" + str(index)
+        index += 1
+        tesselation_dict[s.name] = s
 
     # assert that no sets intersect
-    for i in range(len(all_sets)):
-        for j in range(i + 1, len(all_sets)):
-            assert not all_sets[i].intersects_with(all_sets[j]), (
-                "\n" + all_sets[i].__repr__() + "\n" + all_sets[j].__repr__()
-            )
-    return all_sets_dict
+    for i, x in enumerate(tesselation):
+        for j, y in enumerate(tesselation):
+            if i < j:
+                assert not x.intersects_with(y), (
+                    "\n" + x.__repr__() + "\n" + y.__repr__()
+                )    
+    return tesselation_dict
+
+def get_obstacle_to_set_mapping(start_block_pos:T.List[npt.NDArray], target_block_pos:T.List[npt.NDArray], convex_set_tesselation:T.Dict[str, AlignedSet])->T.Dict[str, str]:
+    obstacle_to_set = dict()
+    for (i, pos) in enumerate(start_block_pos):
+        for aset in convex_set_tesselation.values():
+            if aset.point_is_in_set(pos):
+                obstacle_to_set["s"+str(i)] = aset.name
+                break
+
+    for (i, pos) in enumerate(target_block_pos):
+        for aset in convex_set_tesselation.values():
+            if aset.point_is_in_set(pos):
+                obstacle_to_set["t"+str(i)] = aset.name
+                break
+    return obstacle_to_set
+
 
 
 def locations_to_aligned_sets(start, target, block_width, bounding_box):
     bw = block_width
-    sets = []
+    obstacle_sets = []
     for i, (x, y) in enumerate(start):
         obst = AlignedSet(l=x - bw, r=x + bw, b=y - bw, a=y + bw, name="s" + str(i))
-        nobst = obst.intersection(bounding_box)
+        nobst = obst.intersection(bounding_box.copy())
         nobst.name = "s" + str(i)
         nobst.obstacles = [("s", i)]
-        sets.append(nobst)
+        obstacle_sets.append(nobst)
     for i, (x, y) in enumerate(target):
         obst = AlignedSet(l=x - bw, r=x + bw, b=y - bw, a=y + bw, name="t" + str(i))
-        nobst = obst.intersection(bounding_box)
+        nobst = obst.intersection(bounding_box.copy())
         nobst.name = "t" + str(i)
         nobst.obstacles = [("t", i)]
-        sets.append(nobst)
-        # sets.append(AlignedSet(l=x - bw, r=x + bw, b=y - bw, a=y + bw, name="t" + str(i)))
-    return sets
+        obstacle_sets.append(nobst)
+    return obstacle_sets
 
 
 def plot_list_of_aligned_sets(
-    sets, bounding_box, visitations=None, moving_block_index=None, loc_path=None
+    obstacles, sets, bounding_box, block_width, visitations=None, moving_block_index=None, loc_path=None
 ):
-    colors = cm.rainbow(np.linspace(0, 1, 30))
+    # colors = cm.rainbow(np.linspace(0, 1, 30))
     _, ax = plt.subplots()
     index = 0
     for a_set in sets.values():
         index += 1
         if visitations is None:
-            color = colors[index]
+            if len(a_set.obstacles) > 0:
+                print(a_set.name, a_set.obstacles)
+                color = 'grey'
+            else:
+                color = 'white'
         else:
             if a_set.name[0] == "s" and visitations[int(a_set.name[1:])] == 0:
                 color = "grey"
@@ -242,18 +266,16 @@ def plot_list_of_aligned_sets(
                 color = "white"
             if a_set.name[0] in ("s", "t") and int(a_set.name[1:]) == moving_block_index:
                 color = "limegreen"
-
         ax.add_patch(a_set.get_rectangle(color))
-        if a_set.set_is_obstacle:
-            ax.annotate(
-                a_set.name,
-                ((a_set.l + a_set.r) / 2, (a_set.b + a_set.a) / 2),
-                color="black",
-                weight="bold",
-                fontsize=10,
-                ha="center",
-                va="center",
-            )
+        ax.annotate(
+            a_set.name +"\n" + str(a_set.obstacles) ,
+            ((a_set.l + a_set.r) / 2, (a_set.b + a_set.a) / 2),
+            color="black",
+            weight="bold",
+            fontsize=8,
+            ha="center",
+            va="center",
+        )
     if loc_path is not None:
         ax.plot(
             [x[0] for x in loc_path],
@@ -261,23 +283,76 @@ def plot_list_of_aligned_sets(
             color="mediumblue",
             linewidth=3,
         )
+    x_obstacle = [x for (x,y) in obstacles]
+    y_obstacle = [y for (x,y) in obstacles]
+    ax.scatter(x_obstacle,y_obstacle, color="mediumblue")
+    
+    
+    for (x,y) in obstacles:
+        ax.add_patch( patches.Rectangle(
+                (x-block_width/2, y-block_width/2),
+                block_width,
+                block_width,
+                linewidth=1,
+                edgecolor="white",
+                facecolor="mediumblue",
+                alpha = 0.3,
+            ) )
 
     ax.set_xlim([bounding_box.l, bounding_box.r])
     ax.set_ylim([bounding_box.b, bounding_box.a])
+    ax.axis('equal')
     plt.show()
 
-
 if __name__ == "__main__":
-    bounding_box = AlignedSet(b=0, a=12, l=0, r=12)
+    small_delta = 0.00001
     block_width = 1
-    start = [(1, 1), (3, 5), (7, 4)]
-    target = [(5, 11), (9, 7), (5, 8)]
-    # start = [(1,1)]
-    # target = [(5,11)]
+    block_width_minus_delta = block_width - small_delta
+    half_block_width = block_width/2
+    half_block_width_minus_delta = block_width_minus_delta / 2
+    
+    # MUST offset the bounding box
+    bounding_box = AlignedSet(b=0, a=3, l=0, r=7)
+    
+    start =  [ (1-0.5, 1-0.5), (1-0.5, 2-0.5), (3-0.5, 1-0.5)]
+    target = [ (7-0.5, 1-0.5), (7-0.5, 3-0.5), (5-0.5, 1-0.5)]
 
-    obstacles = locations_to_aligned_sets(start, target, block_width, bounding_box)
-    sets = axis_aligned_tesselation(bounding_box, obstacles)
+    bounding_box = AlignedSet(b=0, a=6, l=0, r=7)
+    start = [
+        (1 - 0.5, 5 - 0.5),
+        (1 - 0.5, 1 - 0.5),
+        (1 - 0.5, 3 - 0.5),
+        (3 - 0.5, 3 - 0.5),
+        (3 - 0.5, 1 - 0.5),
+        (1 - 0.5, 5 - 0.5),
+        (3 - 0.5, 5 - 0.5),
+    ]
+    target = [
+        (1 - 0.5, 6 - 0.5),
+        (7 - 0.5, 1 - 0.5),
+        (5 - 0.5, 1 - 0.5),
+        (5 - 0.5, 3 - 0.5),
+        (5 - 0.5, 5 - 0.5),
+        (7 - 0.5, 5 - 0.5),
+        (7 - 0.5, 3 - 0.5),
+    ]
+    fast = True
+
+
+    bounding_box = AlignedSet(b=0, a=3, l=0, r=7)
+    start =  [(4-0.5, 2-0.5), (1-0.5, 1-0.5), (1-0.5, 3-0.5), (3-0.5, 3-0.5), (3-0.5, 1-0.5)]
+    target = [(4-0.5, 2-0.5), (7-0.5, 1-0.5), (7-0.5, 3-0.5), (5-0.5, 3-0.5), (5-0.5, 1-0.5)]
+    
+    bounding_box = AlignedSet(b=0, a=2, l=0, r=6)
+    start =  [(1-0.5, 1-0.5), (1-0.5, 2-0.5), (2-0.5, 2-0.5), (2-0.5, 1-0.5)]
+    target = [(6-0.5, 1-0.5), (6-0.5, 2-0.5), (5-0.5, 2-0.5), (5-0.5, 1-0.5)]
+
+    convex_relaxation = False
+
+    bounding_box.offset_in(half_block_width_minus_delta)
+    obstacles = locations_to_aligned_sets(start, target, block_width_minus_delta, bounding_box)
+    tesselation = axis_aligned_tesselation(bounding_box, obstacles)
 
     # fix
     colors = cm.rainbow(np.linspace(0, 1, 30))
-    plot_list_of_aligned_sets(sets, bounding_box)
+    plot_list_of_aligned_sets(start+target, tesselation, bounding_box, block_width_minus_delta)

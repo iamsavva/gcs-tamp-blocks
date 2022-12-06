@@ -34,8 +34,10 @@ class MotionPlanning:
         start_block_pos: T.List[T.Tuple[float, float]],  # n start positions
         target_block_pos: T.List[T.Tuple[float, float]],  # n target positions
         convex_set_tesselation: T.Dict[str, AlignedSet],  # space tesselation
+        obstacle_to_set: T.Dict[str, str],
         moving_block_index: int,  # index of the blocks we are moving right now
         convex_relaxation: bool = False,  # whether flows are integer or not
+        share_edge_tol: float = 0.000001
     ) -> None:
         self.num_blocks = len(start_block_pos)  # type: int
         self.moving_block_index = moving_block_index  # type: int
@@ -45,20 +47,22 @@ class MotionPlanning:
         smbi = str(self.moving_block_index)  # type: str
         self.start_tsp = "s" + smbi + "_tsp"  # type: str
         self.target_tsp = "t" + smbi + "_tsp"  # type: str
-        self.start_mp = "s" + smbi + "_mp" + smbi  # type: str
-        self.target_mp = "t" + smbi + "_mp" + smbi  # type: str
+        self.start_mp = self.mp_name(obstacle_to_set["s" + smbi])# type: str
+        self.target_mp = self.mp_name(obstacle_to_set["t" + smbi])  # type: str
 
         self.bounding_box = bounding_box
         # rename the sets in the convex set tesselation
+        self.obstacle_to_set = obstacle_to_set
         self.convex_set_tesselation = dict()
         for name in convex_set_tesselation:
-            new_name = name + "_mp" + str(self.moving_block_index)
+            new_name = self.mp_name(name)
             self.convex_set_tesselation[new_name] = convex_set_tesselation[name].copy()
             self.convex_set_tesselation[new_name].name = new_name
         assert len(target_block_pos) == self.num_blocks
 
         self.prog = prog  # type: MathematicalProgram
         self.convex_relaxation = convex_relaxation  # type: bool
+        self.share_edge_tol = share_edge_tol # type: float
         # vertecis of the entire program
         self.all_vertices = all_vertices
         self.all_edges = all_edges
@@ -72,6 +76,9 @@ class MotionPlanning:
         self.add_mp_variables_to_prog()
         self.add_mp_constraints_to_prog()
         self.add_mp_costs_to_prog()
+
+    def mp_name(self, name):
+        return name + "_mp" + str(self.moving_block_index)
 
     def add_vertex(self, aligned_set: AlignedSet) -> None:
         """
@@ -118,11 +125,12 @@ class MotionPlanning:
         # add edge from between tsp portion and mp portion
         self.add_edge(self.start_tsp, self.start_mp)
         self.add_edge(self.target_mp, self.target_tsp)
+        # TODO: fix me
         # add all edges within the mp portion
         for set1 in self.convex_set_tesselation.values():
             for set2 in self.convex_set_tesselation.values():
                 # no repeats
-                if set1 != set2 and set1.share_edge(set2):
+                if set1 != set2 and set1.share_edge(set2, self.share_edge_tol):
                     # add edge between set1 and set2
                     self.add_edge(set1.name, set2.name)
 
@@ -222,6 +230,9 @@ class MotionPlanning:
             if e.right.obstacles is not None:
                 # for each obstacle it's part of
                 for (obst_type, obstacle_num) in e.right.obstacles:
+                    # don't add obstacles that correspond to moving yourself
+                    if obstacle_num == self.moving_block_index:
+                        continue
                     # don't make our start/target mp vertices into an obstacle!
                     if e.right.name == self.start_mp and obst_type == "s":
                         continue
@@ -238,22 +249,6 @@ class MotionPlanning:
                     else:
                         raise Exception("non start-target obstacle?")
                     self.prog.AddLinearConstraint(le(A @ x, b))
-
-            # if e.left.name != self.start_tsp and e.right.name[0] == "s":
-            #     # edge goes into a start obstacle
-            #     obstacle_num = int(e.right.name[1:-4])
-            #     x = np.array([self.vertices[self.start_tsp].v[obstacle_num], e.phi])
-            #     A = np.array([[1, 0], [0, -1], [-1, 1]])
-            #     b = np.array([1, 0, 0])
-            #     self.prog.AddLinearConstraint(le(A @ x, b))
-            # # TODO: change this if statement
-            # if e.right.name != self.target_tsp and e.right.name[0] == "t":
-            #     # edge goes into a target obstacle
-            #     obstacle_num = int(e.right.name[1:-4])
-            #     x = np.array([self.vertices[self.start_tsp].v[obstacle_num], e.phi])
-            #     A = np.array([[-1, 0], [0, -1], [1, 1]])
-            #     b = np.array([0, 0, 1])
-            #     self.prog.AddLinearConstraint(le(A @ x, b))
 
     def add_mp_costs_to_prog(self) -> None:
         """

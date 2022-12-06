@@ -131,7 +131,7 @@ class Draw2DSolution:
                 self.grasp(state_next)
             mode_now = mode_next
             state_now = state_next
-            # time.sleep(1.0)
+        time.sleep(1.0)
 
     def move_from_to(self, state_now, state_next):
         delta = state_next - state_now

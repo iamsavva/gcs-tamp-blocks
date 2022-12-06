@@ -15,6 +15,7 @@ from .axis_aligned_set_tesselation_2d import (
     AlignedSet,
     axis_aligned_tesselation,
     locations_to_aligned_sets,
+    get_obstacle_to_set_mapping,
 )
 from .tsp_solver import Vertex, Edge
 from .motion_planning_obstacles_on_off import MotionPlanning
@@ -34,6 +35,7 @@ class BlockMovingObstacleAvoidance:
         bounding_box: AlignedSet,
         block_width: float = 1.0,
         convex_relaxation: bool = False,
+        share_edge_tol: float = 0.000001,
     ) -> None:
         self.num_blocks = len(start_pos) - 1  # type: int
         assert len(target_pos) == len(start_pos)
@@ -49,10 +51,13 @@ class BlockMovingObstacleAvoidance:
         self.target = "ta_tsp"  # str
         self.bounding_box = bounding_box  # type: AlignedSet
         # make a tesselation
+        print(block_width, self.bounding_box)
         obstacles = locations_to_aligned_sets(
             self.start_block_pos, self.target_block_pos, block_width, self.bounding_box
         )
         self.convex_set_tesselation = axis_aligned_tesselation(bounding_box.copy(), obstacles)
+        self.obstacle_to_set = get_obstacle_to_set_mapping(self.start_block_pos, self.target_block_pos, self.convex_set_tesselation)
+        self.share_edge_tol = share_edge_tol
         # init the program
         self.vertices = dict()  # type: T.Dict[str, Vertex]
         self.edges = dict()  # type: T.Dict[str, Edge]
@@ -298,15 +303,17 @@ class BlockMovingObstacleAvoidance:
         """
         for block_index in range(self.num_blocks):
             MotionPlanning(
-                self.prog,
-                self.vertices,
-                self.edges,
-                self.bounding_box.copy(),
-                self.start_block_pos,
-                self.target_block_pos,
-                self.convex_set_tesselation,
-                block_index,
-                self.convex_relaxation,
+                prog = self.prog,
+                all_vertices = self.vertices,
+                all_edges = self.edges,
+                bounding_box = self.bounding_box.copy(),
+                start_block_pos = self.start_block_pos,
+                target_block_pos = self.target_block_pos,
+                convex_set_tesselation = self.convex_set_tesselation,
+                obstacle_to_set = self.obstacle_to_set,
+                moving_block_index = block_index,
+                convex_relaxation = self.convex_relaxation,
+                share_edge_tol = self.share_edge_tol
             )
 
     def solve(self):
@@ -328,7 +335,7 @@ class BlockMovingObstacleAvoidance:
         else:
             YAY("CONVEX RELAXATION IS TIGHT")
 
-    def get_drawing_stuff(self) -> T.Tuple[npt.NDArray, T.List[str]]:
+    def get_trajectory_for_drawing(self) -> T.Tuple[npt.NDArray, T.List[str]]:
         """Returns modes and positions for Draw2DSolution class"""
 
         def add_me(pose: npt.NDArray, mode: str):

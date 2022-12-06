@@ -1,116 +1,121 @@
 import typing as T
+
 import numpy as np
 import numpy.typing as npt
-
 import matplotlib.pyplot as plt
 import matplotlib.patches as patches
-from PIL import Image
 from matplotlib.pyplot import cm
 
 
 class Box:
-    def __init__(self, lb, ub, state_dim):
+    """
+    Simple class for defining axis aligned boxes and getting their half space representations.
+    """
+    def __init__(self, lb:npt.NDArray, ub:npt.NDArray, state_dim:int):
         assert state_dim == len(lb)
         assert state_dim == len(ub)
         self.lb = lb
         self.ub = ub
         self.state_dim = state_dim
 
-    def get_hpolyhedron(self):
-        # Ax <= b
+    def get_hpolyhedron(self) -> T.Tuple[npt.NDArray, npt.NDArray]:
+        """ Returns an hpolyhedron for the box"""
+        # Ax <= b 
         A = np.vstack((np.eye(self.state_dim), -np.eye(self.state_dim)))
         b = np.hstack((self.ub, -self.lb))
         return A, b
 
-    def get_perspective_hpolyhedron(self):
+    def get_perspective_hpolyhedron(self) -> T.Tuple[npt.NDArray, npt.NDArray]:
+        """ Returns a perspective hpolyhedron for the box"""
         # Ax <= b * lambda
         # Ax - b * lambda <= 0
         # [A -b] [x, lambda]^T <= 0
         A, b = self.get_hpolyhedron()
         b.resize((2 * self.state_dim, 1))
-        pA = np.hstack((A, -b))
+        pA = np.hstack((A, (-1) * b))
         pb = np.zeros(2 * self.state_dim)
         return pA, pb
 
 
 class AlignedSet:
-    # axis aligned set
-    def __init__(self, a, b, l, r, name=""):
-        # above bound a
-        # below bound b
-        # left  bound l
-        # right bound r
+    """
+    A class that defines a 2D axis aligned set and relevant tools.
+    """
+    def __init__(self, a:float, b:float, l:float, r:float, name:str="")->None:
+        # above bound a, y <= a
+        # below bound b, b <= y
+        # left  bound l, l <= x
+        # right bound r, x <= r
         self.constraints = {"a": a, "b": b, "l": l, "r": r}  # type: T.Dict[str, float]
         self.name = name  # type: str
-        self.box = Box(lb=np.array([l, b]), ub=np.array([r, a]), state_dim=2)
+        self.box = Box(lb=np.array([l, b]), ub=np.array([r, a]), state_dim=2) # type: Box
 
     @property
-    def l(self):
+    def l(self)->float:
         return self.constraints["l"]
 
     @property
-    def r(self):
+    def r(self)->float:
         return self.constraints["r"]
 
     @property
-    def a(self):
+    def a(self)->float:
         return self.constraints["a"]
 
     @property
-    def b(self):
+    def b(self)->float:
         return self.constraints["b"]
 
     @property
-    def set_is_non_empty(self):
+    def set_is_non_empty(self)->bool:
+        # TODO: this should be strict
         if self.l >= self.r or self.a <= self.b:
             return False
         return True
 
+    # @property
+    # def set_is_non_empty(self):
+    #     if self.l >= self.r or self.a <= self.b:
+    #         return False
+    #     return True
+
     @property
-    def set_is_obstacle(self):
+    def set_is_obstacle(self)->bool: 
+        # TODO: remove this altogether? check for intersecting boxes elsewhere
         return self.name != ""
 
-    def copy(self):
+    def copy(self)->"AlignedSet":
         return AlignedSet(a=self.a, b=self.b, l=self.l, r=self.r, name=self.name)
 
-    def new_constraint_is_stronger(self, dir: str, new_val: float):
-        if dir in ("b", "l") and self.constraints[dir] < new_val:
-            return True
-        elif dir in ("a", "r") and self.constraints[dir] > new_val:
-            return True
-        return False
-
-    def add_constraints(self, constraints):
-        # return true if set is non empty after adding constraints
-        for (dir, val) in constraints:
-            if self.new_constraint_is_stronger(dir, val):
-                self.constraints[dir] = val
-        return self.set_is_non_empty
-
-    def intersects_with(self, other):
+    def intersects_with(self, other)->bool:
+        # TODO: again,equality constraints man
+        # strictly right of, strictly left of, strictly above, strictly below
         if self.r <= other.l or other.r <= self.l or self.a <= other.b or other.a <= self.b:
             # if self.r < other.l or other.r < self.l or self.a < other.b or other.a < self.b:
             return False
         return True
 
-    def share_edge(self, other):
-        a = min(self.a, other.a)
-        b = max(self.b, other.b)
-        l = max(self.l, other.l)
-        r = min(self.r, other.r)
+    def share_edge(self, other:"AlignedSet")->bool:
+        """
+        Two sets share an edge if they intersect
+            + left of one is right of another  or  below of one is above of another.
+        """
+        b, a = max(self.b, other.b), min(self.a, other.a)
+        l, r = max(self.l, other.l), min(self.r, other.r)
         if ((a - b) > 0 and np.isclose(l, r)) or ((r - l) > 0 and np.isclose(b, a)):
             return True
         return False
 
     def intersection(self, other: "AlignedSet"):
+        # TODO: intersection of two sets can be an edge?
+        # boxes can intersect too
         assert self.intersects_with(other), "sets don't intersect"
-        a = min(self.a, other.a)
-        b = max(self.b, other.b)
-        l = max(self.l, other.l)
-        r = min(self.r, other.r)
+        b, a = max(self.b, other.b), min(self.a, other.a)
+        l, r = max(self.l, other.l), min(self.r, other.r)
         return AlignedSet(a=a, b=b, l=l, r=r)
 
     def is_inside(self, box):
+        # NOTE: this is good to go and accurate
         if self.l >= box.l and self.r <= box.r and self.b >= box.b and self.a <= box.a:
             return True
         return False
@@ -119,17 +124,18 @@ class AlignedSet:
         return "L" + str(self.l) + " R" + str(self.r) + " B" + str(self.b) + " A" + str(self.a)
 
     def get_direction_sets(self, bounding_box: "AlignedSet"):
+        # NOTE: this is good to go
         assert self.is_inside(bounding_box)
-        sets = []
+        dir_sets = []
         # left
-        sets.append(AlignedSet(l=bounding_box.l, r=self.l, a=self.a, b=self.b))
+        dir_sets.append(AlignedSet(l=bounding_box.l, r=self.l, a=self.a, b=self.b))
         # right
-        sets.append(AlignedSet(r=bounding_box.r, l=self.r, a=self.a, b=self.b))
+        dir_sets.append(AlignedSet(r=bounding_box.r, l=self.r, a=self.a, b=self.b))
         # below
-        sets.append(AlignedSet(r=bounding_box.r, l=bounding_box.l, a=self.b, b=bounding_box.b))
+        dir_sets.append(AlignedSet(r=bounding_box.r, l=bounding_box.l, a=self.b, b=bounding_box.b))
         # above
-        sets.append(AlignedSet(r=bounding_box.r, l=bounding_box.l, b=self.a, a=bounding_box.a))
-        return sets
+        dir_sets.append(AlignedSet(r=bounding_box.r, l=bounding_box.l, b=self.a, a=bounding_box.a))
+        return dir_sets
 
     def get_rectangle(self, color: str):
         return patches.Rectangle(

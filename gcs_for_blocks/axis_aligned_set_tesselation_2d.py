@@ -214,18 +214,25 @@ def get_obstacle_to_set_mapping(
     """
     obstacle_to_set = dict()
     for (i, pos) in enumerate(start_block_pos):
+        found = False
         for aset in convex_set_tesselation.values():
             # if point is in the set -- that's it
             if aset.point_is_in_set(pos):
                 obstacle_to_set["s" + str(i)] = aset.name
+                found=True
                 break
+        assert found, "no set for location " + str(pos) + " start" + str(i)
+
 
     for (i, pos) in enumerate(target_block_pos):
+        found = False
         for aset in convex_set_tesselation.values():
             # if point is in the set -- that's it
             if aset.point_is_in_set(pos):
                 obstacle_to_set["t" + str(i)] = aset.name
+                found=True
                 break
+        assert found, "no set for location " + str(pos) + " target" + str(i)
     return obstacle_to_set
 
 

@@ -40,6 +40,7 @@ start_tsp = "s" + smbi + "_tsp"
 target_tsp = "t" + smbi + "_tsp"
 vertices[start_tsp] = Vertex(start_tsp)
 vertices[target_tsp] = Vertex(target_tsp)
+
 ####################################
 # add variables to start and target vertices
 # associated vaiables are visitations, n x 1, each 0 or 1
@@ -106,3 +107,4 @@ loc_path = [primal_solution.GetSolution(e.right_pos) for e in e_path]
 loc_path[0] = primal_solution.GetSolution(e_path[1].left_pos)
 
 plot_list_of_aligned_sets(convex_sets, bounding_box, visitations, moving_block_index, loc_path)
+plot_list_of_aligned_sets(start + target, tesselation, bounding_box, block_width_minus_delta)

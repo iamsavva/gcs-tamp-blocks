@@ -9,7 +9,7 @@ from pydrake.solvers import (  # pylint: disable=import-error, no-name-in-module
 )
 from pydrake.math import le, eq  # pylint: disable=import-error, no-name-in-module
 
-from .util import timeit, WARN, ERROR, YAY # INFO
+from .util import timeit, INFO, WARN, ERROR, YAY  # INFO
 from .axis_aligned_set_tesselation_2d import (
     Box,
     AlignedSet,
@@ -51,7 +51,6 @@ class BlockMovingObstacleAvoidance:
         self.target = "ta_tsp"  # str
         self.bounding_box = bounding_box  # type: AlignedSet
         # make a tesselation
-        print(block_width, self.bounding_box)
         obstacles = locations_to_aligned_sets(
             self.start_block_pos, self.target_block_pos, block_width, self.bounding_box
         )
@@ -72,6 +71,8 @@ class BlockMovingObstacleAvoidance:
         self.add_tsp_constraints_to_prog()
         self.add_tsp_costs_to_prog()
         self.add_motion_planning()
+
+        INFO(str(len(self.vertices)), " vertices", str(len(self.edges)), " edges")
 
     @property
     def n(self) -> int:
@@ -165,11 +166,11 @@ class BlockMovingObstacleAvoidance:
             e.set_left_order(self.prog.NewContinuousVariables(1, "left_order_" + e.name)[0])
             e.set_right_order(self.prog.NewContinuousVariables(1, "right_order" + e.name)[0])
             # add flow variable
-            if self.convex_relaxation:
-                e.set_phi(self.prog.NewContinuousVariables(1, "phi_" + e.name)[0])
-                self.prog.AddLinearConstraint(e.phi, 0.0, 1.0)
-            else:
-                e.set_phi(self.prog.NewBinaryVariables(1, "phi_" + e.name)[0])
+            # if self.convex_relaxation:
+            #     e.set_phi(self.prog.NewContinuousVariables(1, "phi_" + e.name)[0])
+            #     self.prog.AddLinearConstraint(e.phi, 0.0, 1.0)
+            # else:
+            e.set_phi(self.prog.NewBinaryVariables(1, "phi_" + e.name)[0])
 
     def add_tsp_constraints_to_prog(self) -> None:
         """
@@ -331,10 +332,24 @@ class BlockMovingObstacleAvoidance:
 
         flows = [self.solution.GetSolution(e.phi) for e in self.edges.values()]
         not_tight = np.any(np.logical_and(0.01 < np.array(flows), np.array(flows) < 0.99))
-        if not_tight:
-            WARN("CONVEX RELAXATION NOT TIGHT")
+        if self.convex_relaxation:
+            if not_tight:
+                WARN("CONVEX RELAXATION NOT TIGHT")
+            else:
+                YAY("CONVEX RELAXATION IS TIGHT")
         else:
-            YAY("CONVEX RELAXATION IS TIGHT")
+            YAY("WAS SOLVING INTEGER PROGRAM")
+
+        flow_vars = [(e, self.solution.GetSolution(e.phi)) for e in self.edges.values()]
+        non_zero_edges = [e for (e, flow) in flow_vars if flow > 0.01]
+        # print(self.solution.GetSolution(self.vertices["s1_tsp"].v))
+        # for (e, flow) in flow_vars:
+        #     if 0.01 < flow < 0.99:
+        #         print(e.name, flow)
+                
+        
+        v_path, e_path = self.find_path_to_target(non_zero_edges, self.vertices[self.start])
+        now_pose = self.start_pos.copy()
 
     def get_trajectory_for_drawing(self) -> T.Tuple[npt.NDArray, T.List[str]]:
         """Returns modes and positions for Draw2DSolution class"""

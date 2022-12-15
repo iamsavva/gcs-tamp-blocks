@@ -51,22 +51,22 @@ def process_and_solve(bounding_box, start, target, block_width, convex_relaxatio
     x.dt("Building the program")
     # solve
     prog.solve()
-    positions, modes = prog.get_trajectory_for_drawing()
-    # draw
-    bounding_box.offset_in(-half_block_width_minus_tol)
-    target_position = prog.target_pos.copy()
-    target_position.resize(target_position.size)
-    drawer = Draw2DSolution(
-        prog.num_blocks + 1,
-        np.array([bounding_box.r, bounding_box.a]),
-        modes,
-        positions,
-        target_position,
-        fast=fast,
-        no_arm=False,
-        no_padding=True,
-    )
-    drawer.draw_solution()
+    # positions, modes = prog.get_trajectory_for_drawing()
+    # # draw
+    # bounding_box.offset_in(-half_block_width_minus_tol)
+    # target_position = prog.target_pos.copy()
+    # target_position.resize(target_position.size)
+    # drawer = Draw2DSolution(
+    #     prog.num_blocks + 1,
+    #     np.array([bounding_box.r, bounding_box.a]),
+    #     modes,
+    #     positions,
+    #     target_position,
+    #     fast=fast,
+    #     no_arm=False,
+    #     no_padding=True,
+    # )
+    # drawer.draw_solution()
 
 
 #############################################################################
@@ -93,6 +93,22 @@ target = [(2.5, 1), (4.5, 0.5), (4.5, 1.5), (4 - 0.5, 2 - 0.5), (4 - 0.5, 1 - 0.
 bounding_box = AlignedSet(b=0, a=2, l=0, r=5)
 start = [(2.5, 1), (0.5, 0.5), (0.5, 1.5), (1.5, 1.5), (1.5, 0.5)]
 target = [(2.5, 1), (4.5, 0.5), (4.5, 1.5), (3.5, 1.5), (3.5, 0.5)]
+#############################################################################
+# example 4
+bounding_box = AlignedSet(b=0, a=3, l=0, r=3)
+start = [(2.25, 1.5), (0.5, 0.5), (2.25, 1.5)]
+target = [(2, 1), (2.5, 2.5), (2.25, 1.5)]
+convex_relaxation = True
+
+
+np.random.seed(1)
+nb = 10
+ub = 20
+bounding_box = AlignedSet(b=0, a=ub, l=0, r=ub)
+start = [tuple(np.random.uniform(0+block_width/2, ub-block_width/2, 2)) for i in range(nb+1)]
+target = [tuple(np.random.uniform(0+block_width/2, ub-block_width/2, 2)) for i in range(nb+1)]
+convex_relaxation = True
+
 #############################################################################
 process_and_solve(
     bounding_box=bounding_box,

@@ -164,8 +164,8 @@ class GCSAutonomousBlocks(GCSforBlocks):
         # -----------------------------------------------------------------
         # add movement cost on the edge
         if edge_opt.add_each_block_movement_cost:
-            # self.add_each_block_movement_cost(edge)
-            self.add_full_movement_cost(edge)
+            self.add_each_block_movement_cost(edge)
+            # self.add_full_movement_cost(edge)
 
     ###################################################################################
     # Adding constraints and cost terms
